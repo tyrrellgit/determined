@@ -1,5 +1,5 @@
 use determined::algorithms::KalmanFilter;
-use determined::common::Algorithm;
+use determined::filter::Filter;
 use determined::state::State;
 use determined::common::Epoch;
 

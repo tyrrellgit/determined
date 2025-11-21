@@ -8,7 +8,7 @@
 use crate::common::na as na;
 use crate::state::State;
 use crate::common::Epoch;
-use crate::common::Algorithm;
+use crate::filter::Filter;
 use crate::models::{StateTransition, MeasurementModel};
 
 /// KalmanFilter: statically sized (SMatrix) implementation.
@@ -29,7 +29,7 @@ impl<const N: usize, const M: usize> KalmanFilter<N, M> {
     }
 }
 
-impl<const N: usize, const M: usize> Algorithm for KalmanFilter<N, M> {
+impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
     type StateType = State<N, 1>;
     type ObservationType = State<M, 1>;
 
@@ -109,7 +109,7 @@ where
     }
 }
 
-impl<const N: usize, const M: usize, T, U> Algorithm for Ekf<N, M, T, U>
+impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
 where
     T: StateTransition<N> + Default,
     U: MeasurementModel<N, M> + Default,
