@@ -1,8 +1,15 @@
+//! Measurement helpers and observation types.
+//!
+//! `Measurement` is a small container that groups a state, observation and a
+//! joint covariance / jacobian. It provides convenience constructors and a
+//! minimal update/predict placeholder useful for tests and examples.
+
 use crate::common::na as na;
 use crate::common::Epoch;
 use crate::state::State;
 use crate::common::Composable;
 
+/// A convenience alias for a column vector observation of length `O`.
 pub type Observation<const O: usize> = State<O, 1>;
 
 #[derive(Clone, Debug)]
@@ -14,10 +21,6 @@ pub struct Measurement<const S: usize, const O: usize, const N: usize> {
 }
 
 impl<const S: usize, const O: usize, const N: usize> Measurement<S, O, N> {
-    /// Construct a Measurement, validating that the provided `N` matches
-    /// the intended combined size `S + O`. If the sizes don't match this
-    /// constructor will panic. Covariance will be initialized to identity
-    /// and jacobian to zeros by default; callers can replace them.
     pub fn new(state: State<S, 1>, observation: State<O, 1>) -> Self {
         // runtime check: ensure N == S + O
         if N != (S + O) {
@@ -32,18 +35,14 @@ impl<const S: usize, const O: usize, const N: usize> Measurement<S, O, N> {
         }
     }
 
-    /// Time-predict the measurement's state (placeholder).
-    /// Returns a new State<S,1> with epoch set to the provided epoch.
+    /// TODO: Time-predict the measurement's state
     pub fn predict(&self, epoch: &Epoch) -> State<S, 1> {
         let mut predicted = self.state.clone();
         predicted.epoch = epoch.value;
         predicted
     }
 
-    /// Incorporate a new observation into this measurement (minimal placeholder).
-    /// This intentionally avoids coupling to any concrete Filter trait; actual
-    /// filter processing should be done externally by passing this measurement
-    /// and/or its observation to the appropriate algorithm.
+    /// TODO: Incorporate a new observation into this measurement
     pub fn update(&mut self, observation: &State<O, 1>) {
         self.observation = observation.clone();
     }
@@ -52,10 +51,7 @@ impl<const S: usize, const O: usize, const N: usize> Measurement<S, O, N> {
 impl<const S: usize, const O: usize, const N: usize> Composable for Measurement<S, O, N> {
     type Output = Measurement<S, O, N>;
 
-    /// Combine two measurements by composing their components.
-    /// - states and observations are combined via their Composable::add impls
-    /// - covariance and jacobian are summed (simple fusion; replace with
-    ///   more appropriate combination if needed)
+    /// TODO: Combine two measurements by composing their components
     fn add(self, other: Measurement<S, O, N>) -> Measurement<S, O, N> {
         Measurement {
             state: self.state.add(other.state),

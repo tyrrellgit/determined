@@ -1,3 +1,10 @@
+//! Algorithms module
+//!
+//! Contains concrete filter algorithm implementations. The implementations are
+//! intentionally written using nalgebra's statically sized `SMatrix` types so
+//! they can be used in `no_std`/embedded contexts with predictable memory
+//! usage.
+
 use crate::common::na as na;
 use crate::state::State;
 use crate::common::Epoch;

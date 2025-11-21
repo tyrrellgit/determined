@@ -1,3 +1,7 @@
+//! Small typed wrapper around nalgebra static matrices representing a state or
+//! observation. `State<R,C>` is a thin container that carries a `SMatrix` and
+//! a simple `epoch` value used for timestamping.
+
 use crate::common::na as na;
 use crate::common::Composable;
 
@@ -9,8 +13,6 @@ pub struct State<const R: usize, const C: usize> {
 }
 
 impl<const R: usize, const C: usize> State<R, C> {
-    /// Create a State filled with `fill` and set epoch.
-    /// This is a convenience constructor used throughout the codebase.
     pub fn new(fill: f64, epoch: u64) -> Self {
         State {
             value: na::SMatrix::<f64, R, C>::from_element(fill),
@@ -18,7 +20,6 @@ impl<const R: usize, const C: usize> State<R, C> {
         }
     }
 
-    /// Explicit constructor from an SMatrix value.
     pub fn from_matrix(value: na::SMatrix<f64, R, C>, epoch: u64) -> Self {
         State { value, epoch }
     }
@@ -27,8 +28,6 @@ impl<const R: usize, const C: usize> State<R, C> {
 impl<const R: usize, const C: usize> Composable for State<R, C> {
     type Output = State<R, C>;
 
-    /// Element-wise addition of two States. The resulting epoch is the max
-    /// of the two epochs.
     fn add(self, other: State<R, C>) -> State<R, C> {
         State {
             value: self.value + other.value,
