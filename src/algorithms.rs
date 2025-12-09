@@ -92,23 +92,6 @@ where
     pub measurement: U,
 }
 
-impl<const N: usize, const M: usize, T, U> Ekf<N, M, T, U>
-where
-    T: StateTransition<N>,
-    U: MeasurementModel<N, M>,
-{
-    pub fn new(transition: T, measurement: U) -> Self {
-        Ekf {
-            x: State::<N, 1>::new(0.0, 0),
-            p: na::SMatrix::<f64, N, N>::identity(),
-            q: na::SMatrix::<f64, N, N>::zeros(),
-            r: na::SMatrix::<f64, M, M>::identity(),
-            transition,
-            measurement,
-        }
-    }
-}
-
 impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
 where
     T: StateTransition<N> + Default,
@@ -117,11 +100,15 @@ where
     type StateType = State<N, 1>;
     type ObservationType = State<M, 1>;
 
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        Ekf::new(T::default(), U::default())
+    fn new(transition: T, measurement: U) -> Self {
+        Ekf {
+            x: State::<N, 1>::new(0.0, 0),
+            p: na::SMatrix::<f64, N, N>::identity(),
+            q: na::SMatrix::<f64, N, N>::zeros(),
+            r: na::SMatrix::<f64, M, M>::identity(),
+            transition,
+            measurement,
+        }
     }
 
     fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
