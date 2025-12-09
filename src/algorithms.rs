@@ -100,14 +100,14 @@ where
     type StateType = State<N, 1>;
     type ObservationType = State<M, 1>;
 
-    fn new(transition: T, measurement: U) -> Self {
+    fn new() -> Self {
         Ekf {
             x: State::<N, 1>::new(0.0, 0),
             p: na::SMatrix::<f64, N, N>::identity(),
             q: na::SMatrix::<f64, N, N>::zeros(),
             r: na::SMatrix::<f64, M, M>::identity(),
-            transition,
-            measurement,
+            transition: T::default(),
+            measurement: U::default(),
         }
     }
 
