@@ -14,5 +14,8 @@ Cargo.lock
 # Contains mutation testing data
 **/mutants.out*/
 
+# Python cache files
+__pycache__/
+
 # Media
 media/
