@@ -11,8 +11,4 @@ pyo3 = { version = "0.21", features = ["extension-module"] }
 
 [lib]
 name = "determined"
-crate-type = ["cdylib"]
-
-[[bin]]
-name = "demo"
-path = "src/main.rs"
+crate-type = ["lib", "cdylib"]
