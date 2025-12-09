@@ -1,9 +1,5 @@
 //! `Filter` is a trait for basic algorithms. 
 
-use std::collections::HashMap;
-
-use crate::measurement::{Measurement, Observation};
-use crate::state::State;
 use crate::common::Epoch;
 
 /// Core Filter trait shared across algorithm implementations.
