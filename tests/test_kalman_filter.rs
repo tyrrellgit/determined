@@ -5,14 +5,14 @@ use determined::common::Epoch;
 
 #[test]
 fn test_kalman_filter() {
-    let mut kf: KalmanFilter::<1, 1> = KalmanFilter::new();
+    let mut kf: KalmanFilter::<1, 1> = KalmanFilter::default();
     // make sure measurement mapping is set
     kf.h = determined::common::na::SMatrix::<f64, 1, 1>::identity();
 
     let epoch = Epoch { value: 0 };
     kf.predict(&epoch);
 
-    let z: State<1, 1> = State::new(1.0, 1);
+    let z = State::new(vec![1.0], 1);
     kf.update(&z);
 
     let s = kf.state();

@@ -6,7 +6,7 @@
 
 use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
-use crate::algorithms::KalmanFilter;
+use crate::algorithms::DynKalmanFilter;
 use crate::filter::Filter;
 use crate::state::State;
 use crate::common::Epoch;
@@ -16,16 +16,16 @@ use crate::common::na as na;
 #[pyclass]
 pub struct PyKalmanFilter {
     /// The underlying filter (only supports 4,2 for now)
-    kf: KalmanFilter<4, 2>,
+    kf: DynKalmanFilter,
 }
 
 #[pymethods]
 impl PyKalmanFilter {
     /// Create a new Kalman filter for a system with N state dimensions and M measurement dimensions
     #[new]
-    fn new() -> Self {
+    fn new(state_dim: usize, meas_dim: usize) -> Self {
         PyKalmanFilter {
-            kf: KalmanFilter::new(),
+            kf: DynKalmanFilter::new(state_dim, meas_dim),
         }
     }
 
@@ -40,9 +40,9 @@ impl PyKalmanFilter {
         if measurement.len() != 2 {
             return Err(PyValueError::new_err("measurement must have 2 elements"));
         }
-        
-        let meas_matrix = na::SMatrix::<f64, 2, 1>::from_column_slice(&measurement);
-        let obs = State::from_matrix(meas_matrix, 0);
+
+        let meas_matrix = na::OMatrix::<f64, na::Dyn, na::U1>::from_column_slice(&measurement);
+        let obs = State{value: meas_matrix, epoch: 0};
         
         let state = self.kf.update(&obs);
         Ok(state.value.as_slice().to_vec())
@@ -58,84 +58,55 @@ impl PyKalmanFilter {
         Ok(self.kf.p.trace())
     }
 
-    /// Set the state transition matrix F (4x4)
-    fn set_state_transition(&mut self, f: Vec<Vec<f64>>) -> PyResult<()> {
-        if f.len() != 4 || f.iter().any(|row| row.len() != 4) {
-            return Err(PyValueError::new_err("F must be a 4x4 matrix"));
-        }
-        
-        let mut matrix = na::SMatrix::<f64, 4, 4>::zeros();
-        for i in 0..4 {
-            for j in 0..4 {
-                matrix[(i, j)] = f[i][j];
-            }
-        }
-        self.kf.f = matrix;
+    /// Set the state transition matrix F
+    fn set_state_transition(&mut self, f: Vec<f64>) -> PyResult<()> {
+        let dim = self.kf.x.dim();
+        self.kf.f = na::DMatrix::from_row_slice(dim, dim, &f);
         Ok(())
     }
 
-    /// Set the measurement matrix H (2x4)
+    /// Set the measurement matrix H
     fn set_measurement_matrix(&mut self, h: Vec<Vec<f64>>) -> PyResult<()> {
-        if h.len() != 2 || h.iter().any(|row| row.len() != 4) {
-            return Err(PyValueError::new_err("H must be a 2x4 matrix"));
+        let state_dim = self.kf.x.dim();
+        let meas_dim = self.kf.h.nrows();
+
+        // Flatten the nested Vec<Vec<f64>> into a flat Vec<f64>
+        let flat: Vec<f64> = h.into_iter().flatten().collect();
+        if flat.len() != meas_dim * state_dim {
+            return Err(PyValueError::new_err("H must be a matrix of size (meas_dim, state_dim)"));
         }
-        
-        let mut matrix = na::SMatrix::<f64, 2, 4>::zeros();
-        for i in 0..2 {
-            for j in 0..4 {
-                matrix[(i, j)] = h[i][j];
-            }
-        }
+        let matrix = na::DMatrix::from_row_slice(meas_dim, state_dim, &flat);
         self.kf.h = matrix;
         Ok(())
     }
 
-    /// Set the process noise covariance Q (4x4)
+    /// Set the process noise covariance Q
     fn set_process_noise(&mut self, q: Vec<Vec<f64>>) -> PyResult<()> {
-        if q.len() != 4 || q.iter().any(|row| row.len() != 4) {
-            return Err(PyValueError::new_err("Q must be a 4x4 matrix"));
-        }
-        
-        let mut matrix = na::SMatrix::<f64, 4, 4>::zeros();
-        for i in 0..4 {
-            for j in 0..4 {
-                matrix[(i, j)] = q[i][j];
-            }
-        }
+        let dim = self.kf.x.dim();
+        let matrix = na::DMatrix::from_row_slice(dim, dim, &q.concat());
         self.kf.q = matrix;
         Ok(())
     }
 
-    /// Set the measurement noise covariance R (2x2)
+    /// Set the measurement noise covariance R
     fn set_measurement_noise(&mut self, r: Vec<Vec<f64>>) -> PyResult<()> {
-        if r.len() != 2 || r.iter().any(|row| row.len() != 2) {
-            return Err(PyValueError::new_err("R must be a 2x2 matrix"));
-        }
-        
-        let mut matrix = na::SMatrix::<f64, 2, 2>::zeros();
-        for i in 0..2 {
-            for j in 0..2 {
-                matrix[(i, j)] = r[i][j];
-            }
-        }
+        let dim = self.kf.h.nrows();
+        let matrix = na::DMatrix::from_row_slice(dim, dim, &r.concat());
         self.kf.r = matrix;
         Ok(())
     }
 
     /// Set the initial state estimate
-    fn set_state(&mut self, state: Vec<f64>) -> PyResult<()> {
-        if state.len() != 4 {
-            return Err(PyValueError::new_err("state must have 4 elements"));
-        }
-        
-        let state_vec = na::SVector::<f64, 4>::from_row_slice(&state);
-        self.kf.x = State::from_matrix(state_vec.into(), 0);
+    fn set_state(&mut self, state: Vec<f64>) -> PyResult<()> {   
+        let state_vec = na::OMatrix::<f64, na::Dyn, na::U1>::from_column_slice(&state);    
+        self.kf.x = State{value: state_vec, epoch: 0};
         Ok(())
     }
 
     /// Set the initial covariance (uses diagonal matrix with given value)
     fn set_covariance(&mut self, initial_uncertainty: f64) -> PyResult<()> {
-        self.kf.p = na::SMatrix::<f64, 4, 4>::identity() * initial_uncertainty;
+        let dim = self.kf.x.dim();
+        self.kf.p = na::DMatrix::<f64>::identity(dim, dim) * initial_uncertainty;
         Ok(())
     }
 

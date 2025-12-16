@@ -8,6 +8,7 @@
 use determined::algorithms::KalmanFilter;
 use determined::filter::Filter;
 use determined::state::State;
+use determined::measurement::Observation;
 use determined::common::Epoch;
 use determined::common::na as na;
 
@@ -39,7 +40,7 @@ fn setup_two_mass_spring_damper_filter() -> KalmanFilter<4, 2> {
         0.0, 0.0, 1.0, 0.0,
     );
 
-    let mut kf: KalmanFilter::<4, 2> = Filter::new();
+    let mut kf = KalmanFilter::<4, 2>::default();
     
     kf.f = f;
     kf.h = h;
@@ -59,7 +60,10 @@ fn setup_two_mass_spring_damper_filter() -> KalmanFilter<4, 2> {
     
     // Initial state estimate
     let x_hat_init = na::SVector::<f64, 4>::new(-1.0, 0.0, -0.5, 0.0);
-    kf.x = State::from_matrix(x_hat_init.into(), 0);
+    kf.x = State{
+        value: x_hat_init.into(),
+        epoch: 0
+    };
     
     // Initial covariance
     kf.p = identity * 2.0;
@@ -93,8 +97,11 @@ fn main() {
             &[noise_std_dev, noise_std_dev]
         );
         let measurement_value = h * &x_true + noise_matrix;
-        let observation = State::from_matrix(measurement_value, step as u64);
-        
+        let observation = Observation{
+            value: measurement_value,
+            epoch: step as u64,
+        };
+
         // Update filter
         kf.update(&observation);
         

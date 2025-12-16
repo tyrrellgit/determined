@@ -14,7 +14,7 @@ use crate::models::{StateTransition, MeasurementModel};
 /// KalmanFilter: statically sized (SMatrix) implementation.
 #[derive(Clone, Debug)]
 pub struct KalmanFilter<const N: usize, const M: usize> {
-    pub x: State<N, 1>,                         // state vector (N x 1)
+    pub x: State<na::Const<N>>,                         // state vector (N x 1)
     pub p: na::SMatrix<f64, N, N>,             // covariance (N x N)
     pub f: na::SMatrix<f64, N, N>,             // state transition (N x N)
     pub q: na::SMatrix<f64, N, N>,             // process noise (N x N)
@@ -22,27 +22,22 @@ pub struct KalmanFilter<const N: usize, const M: usize> {
     pub r: na::SMatrix<f64, M, M>,             // measurement noise (M x M)
 }
 
-impl<const N: usize, const M: usize> KalmanFilter<N, M> {
-    pub fn builder() -> Self {
-        // convenience builder -> default values
-        KalmanFilter::new()
-    }
-}
-
-impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
-    type StateType = State<N, 1>;
-    type ObservationType = State<M, 1>;
-
-    fn new() -> Self {
+impl<const N: usize, const M: usize> Default for KalmanFilter<N, M> {
+    fn default() -> Self {
         KalmanFilter {
-            x: State::new(0.0, 0),
+            x: State::<na::Const<N>>::default(),
             p: na::SMatrix::<f64, N, N>::identity(),
             f: na::SMatrix::<f64, N, N>::identity(),
             q: na::SMatrix::<f64, N, N>::zeros(),
             h: na::SMatrix::<f64, M, N>::zeros(),
-            r: na::SMatrix::<f64, M, M>::identity(),
+            r:na:: SMatrix::<f64, M, M>::identity(),
         }
     }
+}
+
+impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
+    type StateType = State<na::Const<N>>;
+    type ObservationType = State<na::Const<M>>;
 
     fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
         self.x.value = &self.f * &self.x.value;
@@ -78,13 +73,94 @@ impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
     }
 }
 
+// DynKalmanFilter is KalmanFilter with State and SMatrix using dynamic sizing
+// This is less efficient than the statically sized version but allows for
+// flexibility in state and measurement dimensions at runtime.
+#[derive(Clone, Debug)]
+pub struct DynKalmanFilter {
+    pub x: State<na::Dyn>,                 // state vector
+    pub p: na::DMatrix<f64>,                           // covariance
+    pub f: na::DMatrix<f64>,                           // state transition
+    pub q: na::DMatrix<f64>,                           // process noise
+    pub h: na::DMatrix<f64>,                           // measurement matrix
+    pub r: na::DMatrix<f64>,                           // measurement noise
+}
+
+impl DynKalmanFilter {
+    pub fn new(state_dim: usize, meas_dim: usize) -> Self {
+        DynKalmanFilter {
+            x: State::<na::Dyn>::zeros(state_dim, 0),
+            p: na::DMatrix::<f64>::identity(state_dim, state_dim),
+            f: na::DMatrix::<f64>::identity(state_dim, state_dim),
+            q: na::DMatrix::<f64>::zeros(state_dim, state_dim),
+            h: na::DMatrix::<f64>::zeros(meas_dim, state_dim),
+            r: na::DMatrix::<f64>::identity(meas_dim, meas_dim),
+        }
+    }
+}
+
+impl Default for DynKalmanFilter {
+    fn default() -> Self {
+        let state_dim: usize = 1;
+        let meas_dim: usize = 1;
+        DynKalmanFilter {
+            x: State::<na::Dyn>::zeros(state_dim, 0),
+            p: na::DMatrix::<f64>::identity(state_dim, state_dim),
+            f: na::DMatrix::<f64>::identity(state_dim, state_dim),
+            q: na::DMatrix::<f64>::zeros(state_dim, state_dim),
+            h: na::DMatrix::<f64>::zeros(meas_dim, state_dim),
+            r: na::DMatrix::<f64>::identity(meas_dim, meas_dim),
+        }
+    }
+}
+
+impl Filter for DynKalmanFilter {
+    type StateType = State<na::Dyn>;
+    type ObservationType = State<na::Dyn>;
+
+    fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
+        self.x.value = &self.f * &self.x.value;
+        self.p = &self.f * &self.p * self.f.transpose() + &self.q;
+        &self.x
+    }
+
+    fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> &'a Self::StateType {
+        let z = &observation.value;
+        let s = &self.h * &self.p * self.h.transpose() + &self.r;
+        let s_inv = s.try_inverse().expect("innovation covariance S is singular");
+        let k = &self.p * self.h.transpose() * s_inv;
+        let y = z - &self.h * &self.x.value;
+
+        self.x.value = &self.x.value + &k * y;
+
+        let i = na::DMatrix::<f64>::identity(self.p.nrows(), self.p.ncols());
+        self.p = (i - &k * &self.h) * &self.p;
+        &self.x
+    }
+
+    fn state(&self) -> &Self::StateType {
+        &self.x
+    }
+
+    fn state_mut(&mut self) -> &mut Self::StateType {
+        &mut self.x
+    }
+
+    fn reset(&mut self) {
+        self.x.value.fill(0.0);
+        self.p = na::DMatrix::<f64>::identity(self.p.nrows(), self.p.ncols());
+    }
+}
+
 /// Extended Kalman Filter implementation using given state transition and measurement models.
+/// This is a candidate for a generic filtering algorithm interface but we still need to solve
+/// the python bindings for generic types in regards to N and M for memeory allocation.
 pub struct Ekf<const N: usize, const M: usize, T, U>
 where
     T: StateTransition<N>,
     U: MeasurementModel<N, M>,
 {
-    pub x: State<N, 1>,
+    pub x: State<na::Const<N>>,
     pub p: na::SMatrix<f64, N, N>,
     pub q: na::SMatrix<f64, N, N>,
     pub r: na::SMatrix<f64, M, M>,
@@ -92,17 +168,14 @@ where
     pub measurement: U,
 }
 
-impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
+impl<const N: usize, const M: usize, T, U> Default for Ekf<N, M, T, U>
 where
     T: StateTransition<N> + Default,
     U: MeasurementModel<N, M> + Default,
 {
-    type StateType = State<N, 1>;
-    type ObservationType = State<M, 1>;
-
-    fn new() -> Self {
+    fn default() -> Self {
         Ekf {
-            x: State::<N, 1>::new(0.0, 0),
+            x: State::<na::Const<N>>::default(),
             p: na::SMatrix::<f64, N, N>::identity(),
             q: na::SMatrix::<f64, N, N>::zeros(),
             r: na::SMatrix::<f64, M, M>::identity(),
@@ -110,6 +183,15 @@ where
             measurement: U::default(),
         }
     }
+}
+
+impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
+where
+    T: StateTransition<N>,
+    U: MeasurementModel<N, M>,
+{
+    type StateType = State<na::Const<N>>;
+    type ObservationType = State<na::Const<M>>;
 
     fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
         let x_pred = self.transition.f(&self.x.value, None);

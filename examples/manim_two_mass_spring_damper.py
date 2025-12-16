@@ -64,8 +64,8 @@ def simulate_rust(num_steps=100, process_noise=0.0, measurement_noise=0.05):
     """
     f, h, q, r, x0, dt = setup_two_mass_spring_damper_params()
 
-    rust_filter = PyKalman()
-    rust_filter.set_state_transition(f.tolist())
+    rust_filter = PyKalman(state_dim=f.shape[0], meas_dim=h.shape[0])
+    rust_filter.set_state_transition(f.flatten().tolist())
     rust_filter.set_measurement_matrix(h.tolist())
     rust_filter.set_process_noise(q.tolist())
     rust_filter.set_measurement_noise(r.tolist())
