@@ -16,10 +16,11 @@ or use `--renderer=opengl` if installed and desired.
 
 import numpy as np
 from manim import (
-    Scene, Line, Rectangle, Axes, VMobject, Text, ValueTracker,
-    DashedVMobject,
-    always_redraw, Mobject, linear, LEFT, RIGHT, UP, DOWN,
-    BLUE, GREEN, GREY, WHITE
+    Scene, Axes, VMobject, DashedVMobject,
+    Line, Rectangle, Text, ValueTracker,
+    always_redraw, linear,
+    LEFT, UP, DOWN,
+    BLUE, GREEN, GREY
 )
 
 # Use the Rust PyO3 wrapper for the Kalman filter
