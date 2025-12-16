@@ -19,3 +19,10 @@ The main modules are:
 - `crate::state` — small `State<R,C>` wrapper around nalgebra matrices.
 - `crate::measurement` — measurement/observation helpers.
 - `crate::models` — traits for state transition and measurement models used by EKF.
+
+## Examples
+
+Run a visualisation example using `python` and `manim`:
+```bash
+manim -pql examples/manim_two_mass_spring_damper.py TwoMassSpringDamperScene
+```
