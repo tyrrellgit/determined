@@ -18,10 +18,6 @@ pub trait Filter {
     type StateType;
     type ObservationType;
 
-    fn new() -> Self
-    where
-        Self: Sized;
-
     fn predict<'a>(&'a mut self, epoch: &Epoch) -> &'a Self::StateType;
     fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> &'a Self::StateType;
     fn state(&self) -> &Self::StateType;
