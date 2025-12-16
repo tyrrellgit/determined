@@ -2,36 +2,74 @@
 //! observation. `State<R,C>` is a thin container that carries a `SMatrix` and
 //! a simple `epoch` value used for timestamping.
 
-use crate::common::na as na;
-use crate::common::Composable;
-
+use crate::common::{Composable, na as na};
 
 #[derive(Clone, Debug)]
-pub struct State<const R: usize, const C: usize> {
-    pub value: na::SMatrix<f64, R, C>,
+pub struct State<T>
+where
+    T: na::Dim,
+    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>,
+{
+    pub value: na::Matrix<f64, T, na::U1, na::Owned<f64, T, na::U1>>,
     pub epoch: u64,
 }
 
-impl<const R: usize, const C: usize> State<R, C> {
-    pub fn new(fill: f64, epoch: u64) -> Self {
+impl<T> State<T>
+where
+    T: na::Dim,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+{
+    pub fn new(value: Vec<f64>, epoch: u64) -> Self {
+        let dim = value.len();
         State {
-            value: na::SMatrix::<f64, R, C>::from_element(fill),
+            value: na::Matrix::<f64, T, na::U1, _>::from_row_slice_generic(
+                T::from_usize(dim),
+                na::U1,
+                &value,
+            ),
             epoch,
         }
     }
 
-    pub fn from_matrix(value: na::SMatrix<f64, R, C>, epoch: u64) -> Self {
-        State { value, epoch }
+    pub fn zeros(size: usize, epoch: u64) -> Self {
+        State {
+            value: na::Matrix::<f64, T, na::U1, _>::zeros_generic(
+                T::from_usize(size),
+                na::U1,
+            ),
+            epoch,
+        }
+    }
+
+    pub fn dim(&self) -> usize {
+        self.value.nrows()
     }
 }
 
-impl<const R: usize, const C: usize> Composable for State<R, C> {
-    type Output = State<R, C>;
+impl<T> Default for State<T>
+where
+    T: na::Dim + na::DimName,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+{
+    fn default() -> Self {
+        Self {
+            value: na::Matrix::<f64, T, na::U1, _>::zeros(),
+            epoch: 0,
+        }
+    }
+}
 
-    fn add(self, other: State<R, C>) -> State<R, C> {
+impl<T> Composable for State<T>
+where
+    T: na::Dim,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+{   
+    type Output = State<T>;
+
+    fn add(self, other: Self) -> Self {
         State {
-            value: self.value + other.value,
-            epoch: std::cmp::max(self.epoch, other.epoch),
+            value: &self.value + &other.value,
+            epoch: self.epoch,
         }
     }
 }
