@@ -5,6 +5,8 @@
 //! they can be used in `no_std`/embedded contexts with predictable memory
 //! usage.
 
+use spdlog;
+
 use crate::common::na as na;
 use crate::state::State;
 use crate::common::Epoch;
@@ -152,10 +154,8 @@ impl Filter for DynKalmanFilter {
     }
 }
 
-/// Extended Kalman Filter implementation using given state transition and measurement models.
-/// This is a candidate for a generic filtering algorithm interface but we still need to solve
-/// the python bindings for generic types in regards to N and M for memeory allocation.
-pub struct Ekf<const N: usize, const M: usize, T, U>
+/// Generic Kalman Filter implementation for arbitrarystate transition and measurement models.
+pub struct KalmanFilterTU<const N: usize, const M: usize, T, U>
 where
     T: StateTransition<N>,
     U: MeasurementModel<N, M>,
@@ -168,13 +168,13 @@ where
     pub measurement: U,
 }
 
-impl<const N: usize, const M: usize, T, U> Default for Ekf<N, M, T, U>
+impl<const N: usize, const M: usize, T, U> Default for KalmanFilterTU<N, M, T, U>
 where
     T: StateTransition<N> + Default,
     U: MeasurementModel<N, M> + Default,
 {
     fn default() -> Self {
-        Ekf {
+        KalmanFilterTU {
             x: State::<na::Const<N>>::default(),
             p: na::SMatrix::<f64, N, N>::identity(),
             q: na::SMatrix::<f64, N, N>::zeros(),
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
+impl<const N: usize, const M: usize, T, U> Filter for KalmanFilterTU<N, M, T, U>
 where
     T: StateTransition<N>,
     U: MeasurementModel<N, M>,
@@ -206,7 +206,16 @@ where
         let h_x = self.measurement.h(&self.x.value);
         let h = self.measurement.jacobian(&self.x.value);
         let s = &h * &self.p * h.transpose() + &self.r;
-        let s_inv = s.try_inverse().expect("innovation covariance S is singular");
+        let s_inv = match s.try_inverse(){
+            None => {
+                spdlog::error!(
+                    "Invalid update: Innovation covariance S is singular; state will not be updated."
+                );
+                return &self.x;
+            }
+            Some(s_inv) => s_inv,
+        };
+        
         let k = &self.p * h.transpose() * s_inv;
         let y = z - h_x;
         self.x.value = &self.x.value + &k * y;
