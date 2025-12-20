@@ -2,24 +2,33 @@
 //! observation. `State<R,C>` is a thin container that carries a `SMatrix` and
 //! a simple `epoch` value used for timestamping.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::common::{Composable, na as na};
+use crate::common::Epoch;
 
 #[derive(Clone, Debug)]
 pub struct State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>,
+    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
 {
     pub value: na::Matrix<f64, T, na::U1, na::Owned<f64, T, na::U1>>,
-    pub epoch: u64,
+    pub covariance: Option<na::Matrix<f64, T, T, na::Owned<f64, T, T>>>,
+    pub epoch: Epoch,
 }
+
+pub type StatePtr<T> = Rc<RefCell<State<T>>>;
 
 impl<T> State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
 {
-    pub fn new(value: Vec<f64>, epoch: u64) -> Self {
+    pub fn new(value: Vec<f64>, covariance: Vec<Vec<f64>>, epoch: Epoch) -> Self {
         let dim = value.len();
         State {
             value: na::Matrix::<f64, T, na::U1, _>::from_row_slice_generic(
@@ -27,16 +36,25 @@ where
                 na::U1,
                 &value,
             ),
+            covariance: Some(na::Matrix::<f64, T, T, _>::from_row_slice_generic(
+                T::from_usize(dim),
+                T::from_usize(dim),
+                &covariance.concat(),
+            )),
             epoch,
         }
     }
 
-    pub fn zeros(size: usize, epoch: u64) -> Self {
+    pub fn zeros(size: usize, epoch: Epoch) -> Self {
         State {
             value: na::Matrix::<f64, T, na::U1, _>::zeros_generic(
                 T::from_usize(size),
                 na::U1,
             ),
+            covariance: Some(na::Matrix::<f64, T, T, _>::zeros_generic(
+                T::from_usize(size),
+                T::from_usize(size),
+            )),
             epoch,
         }
     }
@@ -44,17 +62,33 @@ where
     pub fn dim(&self) -> usize {
         self.value.nrows()
     }
+
+    pub fn covariance(&self) -> na::Matrix<f64, T, T, na::Owned<f64, T, T>> {
+        // TODO: stop this covariance from cloning
+        self.covariance.clone().unwrap_or_else(|| {
+            na::Matrix::<f64, T, T, na::Owned<f64, T, T>>::zeros_generic(
+                T::from_usize(self.dim()),
+                T::from_usize(self.dim()),
+            )
+        })
+    }
+
+    pub fn ptr(&self) -> StatePtr<T> {
+        Rc::new(RefCell::new(self.clone()))
+    }
 }
 
 impl<T> Default for State<T>
 where
     T: na::Dim + na::DimName,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
 {
     fn default() -> Self {
         Self {
             value: na::Matrix::<f64, T, na::U1, _>::zeros(),
-            epoch: 0,
+            covariance: Some(na::Matrix::<f64, T, T, _>::identity()),
+            epoch: Epoch::default(),
         }
     }
 }
@@ -62,13 +96,15 @@ where
 impl<T> Composable for State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
 {   
     type Output = State<T>;
 
     fn add(self, other: Self) -> Self {
         State {
             value: &self.value + &other.value,
+            covariance: Some(self.covariance() + &other.covariance()),
             epoch: self.epoch,
         }
     }
