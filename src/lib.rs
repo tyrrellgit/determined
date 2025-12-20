@@ -22,5 +22,7 @@ pub mod models;
 pub mod filter;
 pub mod python;
 
+mod linalg;
+
 #[cfg(test)]
 mod tests;
