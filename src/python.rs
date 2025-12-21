@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
 use numpy::{ PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2 };
-use numpy::{ PyUntypedArrayMethods, ToPyArray ,PyArrayMethods };
+use numpy::{ ToPyArray ,PyArrayMethods };
 
 use crate::common::na as na;
 use crate::common::Epoch;
