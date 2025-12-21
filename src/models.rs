@@ -11,11 +11,16 @@ use crate::state::{ State, StatePtr };
 
 use crate::linalg::{ moore_penrose_right_inverse };
 
+pub trait DefaultFromState{
+
+    type DefaultType;
+    type StateType;
+
+    fn default_from_state(state: Self::StateType) -> Self::DefaultType;
+}
+
 /// State transition model trait.
 pub trait TransitionModel<const N: usize> {
-    /// Create a default instance of the model from a given state
-    fn default_from_state(state: StatePtr<na::Const<N>>) -> Self where Self: Sized;
-
     /// x(t) -> x(t')
     fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>>;
 
@@ -37,9 +42,6 @@ pub trait MeasurementModel<const N: usize, const M: usize> {
 
 /// Update model trait.
 pub trait UpdateModel<const N: usize, const M: usize> {
-
-    /// Create a default instance of the model from a given state
-    fn default_from_state(state: StatePtr<na::Const<N>>) -> Self where Self: Sized;
 
     /// Compute updated gains
     fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>>;
@@ -81,9 +83,12 @@ impl<const N: usize> LinearTransition<N> {
     }
 }   
 
-impl<const N: usize> TransitionModel<N> for LinearTransition<N> {
+impl<const N: usize> DefaultFromState for LinearTransition<N> {
 
-    fn default_from_state(state: StatePtr<na::Const<N>>) -> Self
+    type DefaultType = LinearTransition<N>;
+    type StateType = StatePtr<na::Const<N>>;
+
+    fn default_from_state(state: Self::StateType) -> Self::DefaultType
     where Self: Sized {
         LinearTransition::new(
             state,
@@ -91,6 +96,9 @@ impl<const N: usize> TransitionModel<N> for LinearTransition<N> {
             na::SMatrix::<f64, N, N>::zeros(),
         )
     }
+}
+
+impl<const N: usize> TransitionModel<N> for LinearTransition<N> {
 
     fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
         // Determine timesteps to propagate
@@ -210,15 +218,21 @@ impl<const N: usize, const M: usize> LinearUpdate<N, M> {
     }
 }
 
-impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
+impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
 
-    fn default_from_state(state: StatePtr<na::Const<N>>) -> Self {
+    type DefaultType = LinearUpdate<N, M>;
+    type StateType = StatePtr<na::Const<N>>;
+
+    fn default_from_state(state: Self::StateType) -> Self::DefaultType {
         LinearUpdate::new(
             state.clone(),
             LinearMeasurement::<N, M>::default(),
             LinearTransition::<N>::default_from_state(state)
         )
     }
+}
+
+impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
 
     fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>> {
 

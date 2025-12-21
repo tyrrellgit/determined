@@ -12,9 +12,11 @@ use crate::common::Epoch;
 use crate::filter::Filter;
 use crate::models::{TransitionModel, UpdateModel, MeasurementModel};
 use crate::models::{LinearTransition, LinearMeasurement, LinearUpdate};
+use crate::models::DefaultFromState;
 
 
-/// Generic Kalman Filter implementation for arbitrary state transition and measurement models.
+/// Generic Kalman Filter implementation for statically sized
+/// state transition and measurement models.
 pub struct KalmanFilterTUH<const N: usize, const M: usize, T, U, H>
 where
     T: TransitionModel<N>,
@@ -27,10 +29,13 @@ where
     pub measurement: H,
 }
 
+/// Implementation for constructors
 impl<const N: usize, const M: usize, T, U, H> KalmanFilterTUH<N, M, T, U, H>
 where
-    T: TransitionModel<N>,
-    U: UpdateModel<N, M>,
+    T: TransitionModel<N>
+        + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
+    U: UpdateModel<N, M>
+        + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = U>,
     H: MeasurementModel<N, M> + Default,
 {
     pub fn new(
@@ -57,6 +62,7 @@ where
     }
 }
 
+/// Filter trait implementation
 impl<const N: usize, const M: usize, T, U, H> Filter for KalmanFilterTUH<N, M, T, U, H>
 where
     T: TransitionModel<N>,
@@ -84,10 +90,7 @@ where
     }
 }
 
-// create the typedef for KalmanFilter as KalmanFilterTU with StateTransition and MeasurementModel using SMatrix
-// TODO: flesh out StateTransition and MeasurementModel implementations alongside Dynamic version of this.
-// Users should be able to create their own models and simply pass them into this struct.  We can then
-// bind this out to python and let users create custom models in python and pass them in too
+/// KalmanFilter
 pub type KalmanFilterNM<const N: usize, const M: usize> =
     KalmanFilterTUH<
         N, M, 
