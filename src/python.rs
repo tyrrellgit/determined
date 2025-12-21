@@ -1,129 +1,209 @@
-//! Python bindings for the determined Kalman filter library
-//! 
-//! This module exposes the KalmanFilter to Python via PyO3.
-
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use pyo3::prelude::*;
-use pyo3::exceptions::PyValueError;
-use crate::algorithms::DynKalmanFilter;
-use crate::filter::Filter;
-use crate::state::State;
-use crate::common::Epoch;
-use crate::common::na as na;
+use pyo3::types::PyAny;
+use numpy::{ PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2 };
+use numpy::{ PyUntypedArrayMethods, ToPyArray ,PyArrayMethods };
 
-/// A Python wrapper around the Kalman Filter
-#[pyclass]
-pub struct PyKalmanFilter {
-    /// The underlying filter (only supports 4,2 for now)
-    kf: DynKalmanFilter,
+use crate::common::na as na;
+use crate::common::Epoch;
+use crate::models::TransitionModel;
+use crate::state::{State, StatePtr};
+
+/// Array types bound to python
+type PyVector<'py> = Bound<'py, PyArray1<f64>>;
+type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
+
+
+#[pyclass(name="Epoch")]
+#[derive(Clone, Debug)]
+pub struct PyEpoch {
+    inner: Epoch,
+}
+
+#[pyclass(name="State")]
+#[derive(Clone, Debug)]
+pub struct PyState {
+    inner: StatePtr<na::Dyn>,
 }
 
 #[pymethods]
-impl PyKalmanFilter {
-    /// Create a new Kalman filter for a system with N state dimensions and M measurement dimensions
+impl PyEpoch {
     #[new]
-    fn new(state_dim: usize, meas_dim: usize) -> Self {
-        PyKalmanFilter {
-            kf: DynKalmanFilter::new(state_dim, meas_dim),
+    fn new(value: i64) -> PyEpoch {
+        PyEpoch{
+            inner: Epoch::new(value)
         }
+    }  
+
+    #[getter]
+    fn value(&self) -> i64 {
+        self.inner.value
     }
+    
+}
 
-    /// Predict the state forward in time
-    fn predict(&mut self) -> PyResult<Vec<f64>> {
-        let state = self.kf.predict(&Epoch { value: 0 });
-        Ok(state.value.as_slice().to_vec())
-    }
-
-    /// Update the filter with a measurement
-    fn update(&mut self, measurement: Vec<f64>) -> PyResult<Vec<f64>> {
-        if measurement.len() != 2 {
-            return Err(PyValueError::new_err("measurement must have 2 elements"));
-        }
-
-        let meas_matrix = na::OMatrix::<f64, na::Dyn, na::U1>::from_column_slice(&measurement);
-        let obs = State{value: meas_matrix, epoch: 0};
+#[pymethods]
+impl PyState {
+    
+    #[new]
+    fn new(
+        value: PyReadonlyArray1<f64>,
+        covariance: Option<PyReadonlyArray2<f64>>,
+        epoch: &PyEpoch
+    ) -> PyResult<Self> {
         
-        let state = self.kf.update(&obs);
-        Ok(state.value.as_slice().to_vec())
+    // numpy -> ndarray (zero-copy view) -> nalgebra
+    let array = value.as_array();
+    let vector = na::DVector::<f64>::from_iterator(
+        array.len(),
+        array.iter().copied()
+    );
+    
+    // Same for covariance
+    let cov = covariance.map(|cov| {
+        let nd_cov = cov.as_array();
+        let (nrows, ncols) = nd_cov.dim();
+        
+        // ndarray -> nalgebra (single copy, row-major)
+        na::DMatrix::<f64>::from_iterator(
+            nrows,
+            ncols,
+            nd_cov.iter().copied()
+        )
+    });
+        
+        Ok(PyState {
+            inner: State {
+                value: vector,
+                covariance: cov,
+                epoch: epoch.inner,
+            }.ptr()
+        })
     }
 
-    /// Get the current state estimate
-    fn get_state(&self) -> PyResult<Vec<f64>> {
-        Ok(self.kf.state().value.as_slice().to_vec())
+    #[getter]
+    fn value<'py>(&self, py: Python<'py>) -> PyVector<'py> {
+        // nalgebra -> numpy
+        let state = self.inner.read().unwrap();
+        state.value.as_slice().to_pyarray(py)
     }
 
-    /// Get the current covariance trace (uncertainty)
-    fn get_covariance_trace(&self) -> PyResult<f64> {
-        Ok(self.kf.p.trace())
+    #[getter]
+    fn epoch(&self) -> i64 {
+        let state = self.inner.read().unwrap();
+        state.epoch.value
     }
 
-    /// Set the state transition matrix F
-    fn set_state_transition(&mut self, f: Vec<f64>) -> PyResult<()> {
-        let dim = self.kf.x.dim();
-        self.kf.f = na::DMatrix::from_row_slice(dim, dim, &f);
-        Ok(())
-    }
-
-    /// Set the measurement matrix H
-    fn set_measurement_matrix(&mut self, h: Vec<Vec<f64>>) -> PyResult<()> {
-        let state_dim = self.kf.x.dim();
-        let meas_dim = self.kf.h.nrows();
-
-        // Flatten the nested Vec<Vec<f64>> into a flat Vec<f64>
-        let flat: Vec<f64> = h.into_iter().flatten().collect();
-        if flat.len() != meas_dim * state_dim {
-            return Err(PyValueError::new_err("H must be a matrix of size (meas_dim, state_dim)"));
-        }
-        let matrix = na::DMatrix::from_row_slice(meas_dim, state_dim, &flat);
-        self.kf.h = matrix;
-        Ok(())
-    }
-
-    /// Set the process noise covariance Q
-    fn set_process_noise(&mut self, q: Vec<Vec<f64>>) -> PyResult<()> {
-        let dim = self.kf.x.dim();
-        let matrix = na::DMatrix::from_row_slice(dim, dim, &q.concat());
-        self.kf.q = matrix;
-        Ok(())
-    }
-
-    /// Set the measurement noise covariance R
-    fn set_measurement_noise(&mut self, r: Vec<Vec<f64>>) -> PyResult<()> {
-        let dim = self.kf.h.nrows();
-        let matrix = na::DMatrix::from_row_slice(dim, dim, &r.concat());
-        self.kf.r = matrix;
-        Ok(())
-    }
-
-    /// Set the initial state estimate
-    fn set_state(&mut self, state: Vec<f64>) -> PyResult<()> {   
-        let state_vec = na::OMatrix::<f64, na::Dyn, na::U1>::from_column_slice(&state);    
-        self.kf.x = State{value: state_vec, epoch: 0};
-        Ok(())
-    }
-
-    /// Set the initial covariance (uses diagonal matrix with given value)
-    fn set_covariance(&mut self, initial_uncertainty: f64) -> PyResult<()> {
-        let dim = self.kf.x.dim();
-        self.kf.p = na::DMatrix::<f64>::identity(dim, dim) * initial_uncertainty;
-        Ok(())
-    }
-
-    /// Reset the filter to initial state
-    fn reset(&mut self) {
-        self.kf.reset();
+    #[getter]
+    fn covariance<'py>(&self, py: Python<'py>) -> Option<PyMatrix<'py>> {
+        let state = self.inner.read().unwrap();
+        state.covariance.as_ref().map(|cov| {
+            cov.as_slice().to_pyarray(py)
+                .reshape([cov.nrows(), cov.ncols()])
+                .unwrap()
+        })
     }
 }
 
-/// Module initialization
-#[pymodule]
-    fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_class::<PyKalmanFilter>()?;
-        
-        let submodule = PyModule::new_bound(_py, "kalman")?;
-        submodule.add_class::<PyKalmanFilter>()?;
-        m.add_submodule(&submodule)?;
-        
-        Ok(())
+// Wrapper for Python-defined state transition - DYNAMIC only
+#[pyclass(name="TransitionModel")]
+pub struct PyTransitionModel {
+    py_obj: Py<PyAny>,
+    state: PyState, 
+}
+
+#[pymethods]
+impl PyTransitionModel {
+
+    #[new]
+    pub fn new(py_obj: Py<PyAny>, state: PyState) -> Self {
+        PyTransitionModel { py_obj, state }
     }
+
+    #[pyo3(name="state")]
+    fn state_transition<'py>(&mut self, epoch: &'py PyEpoch) -> PyState {
+        let state = self.state(&epoch.inner).clone();
+        PyState { inner: state }
+    }
+
+    #[pyo3(name="jacobian")]
+    fn jacobian_matrix<'py>(&mut self, py: Python<'py>, state: &'py PyState) -> PyMatrix<'py> {
+        let state_data = state.inner.read().unwrap();
+        let jac = self.jacobian(&state_data);
+        jac.as_slice()
+            .to_pyarray(py)
+            .reshape([jac.nrows(), jac.ncols()])
+            .unwrap()
+    }
+
+}
+
+
+impl TransitionModel<na::Dyn> for PyTransitionModel {
+    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Dyn> {
+
+        let mut state = self.state.inner.write().unwrap();
+        let py_epoch = PyEpoch{ inner: *epoch };
+        
+        Python::attach(|py| {
+            let py_obj = self.py_obj.bind(py);
+            
+            // Call Python method with state and epoch
+            let result = py_obj
+                .call_method("state", (py_epoch,), None)
+                .expect("Failed to call state()");
+            
+            let result_vec: PyVector<'_> = result
+                .extract()
+                .expect("state() must return ndarray");
+            
+            // numpy -> ndarray (zero copy view)
+            let array = unsafe { result_vec.as_array() };
+
+            // ndarry -> existing vector's data via iterator copy
+            state.value.iter_mut()
+                .zip(array.iter())
+                .for_each(|(dst, src)| *dst = *src);
+
+            state.epoch = *epoch;
+        });
+        
+        &self.state.inner
+    }
+
+    fn jacobian(&self, state: &State<na::Dyn>) -> na::OMatrix<f64, na::Dyn, na::Dyn> {
+        Python::attach(|py| {
+            let py_obj = self.py_obj.bind(py);
+            let vec: PyVector<'_> = state.value.as_slice().to_pyarray(py);
+            
+            let result = py_obj
+                .call_method("jacobian", (vec,), None)
+                .expect("Failed to call jacobian()");
+            
+            let result_vec: PyMatrix<'_> = result
+                .extract()
+                .expect("jacobian() must return ndarray");
+            
+            // numpy -> ndarray (zero copy view)
+            let array = unsafe { result_vec.as_array() };
+            let (nrows, ncols) = array.dim();
+        
+            // ndarray -> nalgebra (single copy, row-major)
+            na::DMatrix::<f64>::from_iterator(
+                nrows,
+                ncols,
+                array.iter().copied()
+            )
+        })
+    }
+}
+
+
+#[pymodule]
+fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyEpoch>()?;
+    m.add_class::<PyState>()?;
+    m.add_class::<PyTransitionModel>()?;
+    Ok(())
+}

@@ -5,9 +5,11 @@ edition = "2024"
 readme = "README.md"
 
 [dependencies]
-nalgebra = "0.33.2"
 spdlog-rs = "0.4"
-pyo3 = { version = "0.21", features = ["extension-module"] }
+pyo3 = { version = "0.27.2", features = ["extension-module"] }
+numpy = "0.27.1"
+ndarray = "0.17.1"
+nalgebra = "0.34.1"
 
 [lib]
 name = "determined"
