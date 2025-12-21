@@ -101,7 +101,7 @@ fn main() {
     let epoch = Epoch { value: 0 };
     let noise_std_dev = 0.05;
     
-    let initial_cov_trace = kf.state().borrow().covariance().trace();
+    let initial_cov_trace = kf.state().read().unwrap().covariance().trace();
     let mut max_error_x1: f64 = 0.0;
     let mut max_error_x2: f64 = 0.0;
     
@@ -126,12 +126,12 @@ fn main() {
         kf.update(&observation);
         
         // Track errors
-        let x_est = kf.state().borrow().value;
+        let x_est = kf.state().read().unwrap().value;
         max_error_x1 = max_error_x1.max((x_est[0] - x_true[0]).abs());
         max_error_x2 = max_error_x2.max((x_est[2] - x_true[2]).abs());
     }
     
-    let final_cov_trace = kf.state().borrow().covariance().trace();
+    let final_cov_trace = kf.state().read().unwrap().covariance().trace();
     let uncertainty_reduction = (1.0 - final_cov_trace / initial_cov_trace) * 100.0;
     
     println!("=== Two-Mass-Spring-Damper Kalman Filter ===");

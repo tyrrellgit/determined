@@ -19,7 +19,7 @@ use crate::models::DefaultFromState;
 /// state transition and measurement models.
 pub struct KalmanFilterTUH<const N: usize, const M: usize, T, U, H>
 where
-    T: TransitionModel<N>,
+    T: TransitionModel<na::Const<N>>,
     U: UpdateModel<N, M>,
     H: MeasurementModel<N, M>,
 {
@@ -32,7 +32,7 @@ where
 /// Implementation for constructors
 impl<const N: usize, const M: usize, T, U, H> KalmanFilterTUH<N, M, T, U, H>
 where
-    T: TransitionModel<N>
+    T: TransitionModel<na::Const<N>>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
     U: UpdateModel<N, M>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = U>,
@@ -65,7 +65,7 @@ where
 /// Filter trait implementation
 impl<const N: usize, const M: usize, T, U, H> Filter for KalmanFilterTUH<N, M, T, U, H>
 where
-    T: TransitionModel<N>,
+    T: TransitionModel<na::Const<N>>,
     U: UpdateModel<N, M>,
     H: MeasurementModel<N, M>,
 {
@@ -85,8 +85,9 @@ where
     }
 
     fn reset(&mut self) {
-        self.state.borrow_mut().value.fill(0.0);
-        self.state.borrow_mut().covariance = Some(na::SMatrix::<f64, N, N>::identity());
+        let mut state = self.state.write().unwrap();
+        state.value.fill(0.0);
+        state.covariance = Some(na::SMatrix::<f64, N, N>::identity());
     }
 }
 

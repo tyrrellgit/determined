@@ -17,7 +17,7 @@ fn test_kalman_update_scalar() {
     let mut filter = KalmanFilterNM::<1, 1>::default_from_state(x);
     // initial state x = 0
 
-    assert_eq!(filter.state().borrow().value[(0, 0)], 0.0);
+    assert_eq!(filter.state().read().unwrap().value[(0, 0)], 0.0);
 
     let obs = Observation{
         value: na::SMatrix::<f64, 1, 1>::from_row_slice(&[1.0]),
@@ -33,7 +33,7 @@ fn test_kalman_update_scalar() {
     let _ = filter.update(&obs);
 
     // With P=I, R=I, H=I we expect K = 1/2 and x -> 0.5
-    let x_val = filter.state().borrow().value[(0, 0)];
+    let x_val = filter.state().read().unwrap().value[(0, 0)];
     assert!((x_val - 0.5).abs() < 1e-12, "x after update = {}", x_val);
 }
 
@@ -61,9 +61,10 @@ fn test_kalman_update_2d() {
     { let _ = filter.update(&obs); }
 
     // Expect first state to be 1.0 (K = [0.5, 0]^T, y = 2)
-    let state = filter.state();
-    let x0 = state.borrow().value[(0, 0)];
-    let x1 = state.borrow().value[(1, 0)];
+    let state_ptr = filter.state();
+    let state = state_ptr.read().unwrap();
+    let x0 = state.value[(0, 0)];
+    let x1 = state.value[(1, 0)];
     assert!((x0 - 1.0).abs() < 1e-12, "x0 after update = {}", x0);
     assert!((x1 - 0.0).abs() < 1e-12, "x1 after update = {}", x1);
 }

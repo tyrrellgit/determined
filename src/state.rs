@@ -2,8 +2,8 @@
 //! observation. `State<R,C>` is a thin container that carries a `SMatrix` and
 //! a simple `epoch` value used for timestamping.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use crate::common::{Composable, na as na};
 use crate::common::Epoch;
@@ -22,7 +22,7 @@ where
 
 pub type StateN<const N: usize> = State<na::Const<N>>;
 pub type StateDyn = State<na::Dyn>;
-pub type StatePtr<T> = Rc<RefCell<State<T>>>;
+pub type StatePtr<T> = Arc<RwLock<State<T>>>;
 
 impl<T> State<T>
 where
@@ -76,7 +76,7 @@ where
     }
 
     pub fn ptr(&self) -> StatePtr<T> {
-        Rc::new(RefCell::new(self.clone()))
+        Arc::new(RwLock::new(self.clone()))
     }
 }
 

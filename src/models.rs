@@ -20,12 +20,17 @@ pub trait DefaultFromState{
 }
 
 /// State transition model trait.
-pub trait TransitionModel<const N: usize> {
+pub trait TransitionModel<N> 
+where
+    N: na::Dim,
+    na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
+        + na::allocator::Allocator<N, N>,
+{
     /// x(t) -> x(t')
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>>;
+    fn state(&mut self, epoch: &Epoch) -> &StatePtr<N>;
 
     /// Jacobian df/dx (N x N)
-    fn jacobian(&self, state: &State<na::Const<N>>) -> na::SMatrix<f64, N, N>;
+    fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, N, N>;
 }
 
 /// Measurement model trait.
@@ -98,30 +103,32 @@ impl<const N: usize> DefaultFromState for LinearTransition<N> {
     }
 }
 
-impl<const N: usize> TransitionModel<N> for LinearTransition<N> {
+impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
 
     fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
         // Determine timesteps to propagate
-        let delta = { *epoch - self.state.borrow().epoch }.value;
+        let mut state = self.state.write().unwrap();
+
+        let delta = { *epoch - state.epoch }.value;
         if delta == 0 {
             return &self.state;
         }
 
-        let cov =  self.state.borrow().covariance();
-        let mut state = self.state.borrow_mut();
+        let cov =  &state.covariance();
 
         if delta > 0 {
             // propagate forward
             for _ in 0..delta {
-                state.value = &self.f * state.value;
-                state.covariance = Some(&self.f * &cov * &self.f.transpose() + &self.q);
+                state.value = &self.f * &state.value;
+
+                state.covariance = Some(&self.f * cov * &self.f.transpose() + &self.q);
             }
         } else {
             // propagate backward
             let f_inv = self.f_inv();
             for _ in 0..delta.abs() {
                 state.value = &f_inv * &state.value;
-                state.covariance = Some(&f_inv * (&cov - &self.q) * &f_inv.transpose());
+                state.covariance = Some(&f_inv * (cov - &self.q) * &f_inv.transpose());
             }
         };
         &self.state
@@ -238,17 +245,18 @@ impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
 
         // propagate state to observation epoch
         _ = self.transition.state(&observation.epoch);
+        let mut state = self.state.write().unwrap();
 
         // project state to measurement domain
-        let z_x = &self.measurement.projection(&self.state.borrow()).value;
+        let z_x = &self.measurement.projection(&state).value;
         let z = &observation.value;
 
-        let cov = self.state.borrow().covariance();
+        let cov = &state.covariance();
 
         // compute gain matrix
         let h = &self.measurement.h;
         let h_t = &self.measurement.h_t;
-        let s = h * &cov * h_t + &self.measurement.r;
+        let s = h * cov * h_t + &self.measurement.r;
         let s_inv = match s.try_inverse(){
             None => {
                 spdlog::error!(
@@ -264,11 +272,10 @@ impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
         let y = z - z_x;
         
         // Update state
-        let mut state = self.state.borrow_mut();
         state.value = &state.value + &k * y;
 
         // Update Covariance
-        state.covariance = Some((self.identity - &k * h) * &cov);
+        state.covariance = Some((self.identity - &k * h) * cov);
 
         &self.state
 
