@@ -20,6 +20,8 @@ where
     pub epoch: Epoch,
 }
 
+pub type StateN<const N: usize> = State<na::Const<N>>;
+pub type StateDyn = State<na::Dyn>;
 pub type StatePtr<T> = Rc<RefCell<State<T>>>;
 
 impl<T> State<T>
