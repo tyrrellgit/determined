@@ -4,6 +4,7 @@
 
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::fmt;
 
 use crate::common::{Composable, na as na};
 use crate::common::Epoch;
@@ -109,5 +110,23 @@ where
             covariance: Some(self.covariance() + &other.covariance()),
             epoch: self.epoch,
         }
+    }
+}
+
+impl<T> fmt::Display for State<T>
+where
+    T: na::Dim,
+    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Format `value`, `covariance`, and `epoch` as desired
+        write!(f, "State:\n")?;
+        write!(f, "  Value: {:0.6}\n", self.value)?; // or custom formatting
+        let _ = match &self.covariance {
+            Some(cov) => write!(f, "  Covariance: {:0.6}\n", cov),
+            None => write!(f, "  Covariance: None\n"),
+        };
+        write!(f, "  Epoch: {}", self.epoch.value)
     }
 }

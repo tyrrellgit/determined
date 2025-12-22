@@ -18,7 +18,8 @@ class DummyTransition:
 
     def state(self, epoch: dt.Epoch):
         self.value += epoch.value
-        return self.value
+        cov = np.eye(self.value.size)
+        return dt.State(self.value, cov, epoch)
     
     def jacobian(self, state: dt.State):
         return self.jac
@@ -29,7 +30,7 @@ transition = dt.TransitionModel(model, state)
 for n in range(2):
     _e = dt.Epoch(n)
     transition.state(_e)
-    print(state.value)
+    print(state)
 
 jac = transition.jacobian(state)
 print(jac)

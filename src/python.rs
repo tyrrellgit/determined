@@ -40,7 +40,10 @@ impl PyEpoch {
     fn value(&self) -> i64 {
         self.inner.value
     }
-    
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self.inner))
+    }
 }
 
 #[pymethods]
@@ -104,6 +107,10 @@ impl PyState {
                 .unwrap()
         })
     }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:0.6}", self.inner.read().unwrap()))
+    }
 }
 
 // Wrapper for Python-defined state transition - DYNAMIC only
@@ -154,21 +161,17 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
                 .call_method("state", (py_epoch,), None)
                 .expect("Failed to call state()");
             
-            let result_vec: PyVector<'_> = result
+            let result_state: PyState = result
                 .extract()
-                .expect("state() must return ndarray");
+                .expect("state() must return <State>");
             
-            // numpy -> ndarray (zero copy view)
-            let array = unsafe { result_vec.as_array() };
+            let _state = result_state.inner.read().unwrap();
 
-            // ndarry -> existing vector's data via iterator copy
-            state.value.iter_mut()
-                .zip(array.iter())
-                .for_each(|(dst, src)| *dst = *src);
-
+            state.value = _state.value.clone();
+            state.covariance = _state.covariance.clone();
             state.epoch = *epoch;
+
         });
-        
         &self.state.inner
     }
 
@@ -199,7 +202,7 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
     }
 }
 
-
+///TODO Measurement model, Update Model, KalmanFilter
 #[pymodule]
 fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyEpoch>()?;
