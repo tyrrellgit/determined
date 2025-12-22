@@ -3,7 +3,7 @@ use determined::filter::Filter;
 use determined::common::na as na;
 use determined::measurement::Observation;
 use determined::state::{ State, StatePtr };
-use determined::common::Epoch;
+use determined::epoch::Epoch;
 
 #[test]
 fn test_kalman_filter() {

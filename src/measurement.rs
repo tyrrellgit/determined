@@ -4,8 +4,10 @@
 //! joint covariance / jacobian. It provides convenience constructors and a
 //! minimal update/predict placeholder useful for tests and examples.
 
-use crate::common::na as na;
-use crate::common::Epoch;
+use std::fmt;
+
+use crate::common::na;
+use crate::epoch::Epoch;
 
 #[derive(Clone, Debug)]
 pub struct Observation<T>
@@ -16,4 +18,19 @@ where
 {
     pub value: na::Matrix<f64, T, na::U1, na::Owned<f64, T, na::U1>>,
     pub epoch: Epoch,
+}
+
+impl<T> fmt::Display for Observation<T>
+where
+    T: na::Dim,
+    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>
+        + na::allocator::Allocator<T, T>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Format `value`, `covariance`, and `epoch` as desired
+        write!(f, "Observation:\n")?;
+        write!(f, "‾‾‾‾‾‾‾‾‾‾‾‾\n")?;
+        write!(f, "  Value: {:0.6}", self.value)?; 
+        write!(f, "  Epoch: {}\n", self.epoch.value)
+    }
 }

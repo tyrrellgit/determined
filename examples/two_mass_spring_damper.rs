@@ -10,8 +10,8 @@ use determined::models::{ LinearTransition, LinearMeasurement, LinearUpdate };
 use determined::filter::Filter;
 use determined::state::State;
 use determined::measurement::Observation;
-use determined::common::Epoch;
-use determined::common::na as na;
+use determined::epoch::Epoch;
+use determined::common::na;
 
 fn setup_two_mass_spring_damper_filter() -> KalmanFilterNM<4, 2> {
     // Physical parameters from UCI example

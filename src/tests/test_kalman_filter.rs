@@ -3,7 +3,7 @@ use crate::state::State;
 use crate::filter::Filter;
 use crate::algorithms::KalmanFilterNM;
 use crate::common::na as na;
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 
 #[test]
 fn test_kalman_update_scalar() {

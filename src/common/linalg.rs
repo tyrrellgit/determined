@@ -1,4 +1,4 @@
-use crate::common::na as na;
+use nalgebra as na;
 
 pub fn moore_penrose_right_inverse<T, const R: usize, const C: usize>(
     a: &na::SMatrix<T, R, C>,

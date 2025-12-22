@@ -14,15 +14,13 @@
 //! - `models` — traits for `StateTransition` and `MeasurementModel` used by EKF.
 
 pub mod common;
-pub mod composition;
 pub mod algorithms;
 pub mod measurement;
 pub mod state;
+pub mod epoch;
 pub mod models;
 pub mod filter;
 pub mod python;
-
-mod linalg;
 
 #[cfg(test)]
 mod tests;

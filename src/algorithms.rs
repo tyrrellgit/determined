@@ -5,14 +5,16 @@
 //! they can be used in `no_std`/embedded contexts with predictable memory
 //! usage.
 
-use crate::common::na as na;
+use crate::common::na;
 use crate::state::StatePtr;
 use crate::measurement::Observation;
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 use crate::filter::Filter;
-use crate::models::{TransitionModel, UpdateModel, MeasurementModel};
-use crate::models::{LinearTransition, LinearMeasurement, LinearUpdate};
-use crate::models::DefaultFromState;
+use crate::models::{
+    TransitionModel, UpdateModel, MeasurementModel,
+    LinearTransition, LinearMeasurement, LinearUpdate,
+    DefaultFromState
+};
 
 
 /// Generic Kalman Filter implementation for statically sized
@@ -21,7 +23,7 @@ pub struct KalmanFilterTUH<const N: usize, const M: usize, T, U, H>
 where
     T: TransitionModel<na::Const<N>>,
     U: UpdateModel<N, M>,
-    H: MeasurementModel<N, M>,
+    H: MeasurementModel<na::Const<N>, na::Const<M>>,
 {
     pub state: StatePtr<na::Const<N>>,
     pub transition: T,
@@ -36,7 +38,7 @@ where
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
     U: UpdateModel<N, M>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = U>,
-    H: MeasurementModel<N, M> + Default,
+    H: MeasurementModel<na::Const<N>, na::Const<M>> + Default,
 {
     pub fn new(
         state: StatePtr<na::Const<N>>,
@@ -67,7 +69,7 @@ impl<const N: usize, const M: usize, T, U, H> Filter for KalmanFilterTUH<N, M, T
 where
     T: TransitionModel<na::Const<N>>,
     U: UpdateModel<N, M>,
-    H: MeasurementModel<N, M>,
+    H: MeasurementModel<na::Const<N>, na::Const<M>>,
 {
     type StateType = StatePtr<na::Const<N>>;
     type ObservationType = Observation<na::Const<M>>;

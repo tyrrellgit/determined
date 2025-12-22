@@ -1,4 +1,4 @@
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 use crate::state::{ State, StateN, StateDyn };
 use crate::common::Composable;
 use crate::common::na as na;

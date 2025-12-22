@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::fmt;
 
-use crate::common::{Composable, na as na};
-use crate::common::Epoch;
+use crate::common::{Composable, na};
+use crate::epoch::Epoch;
 
 #[derive(Clone, Debug)]
 pub struct State<T>
@@ -130,5 +130,4 @@ where
         };
         write!(f, "  Epoch: {}\n", self.epoch.value)
     }
-
 }

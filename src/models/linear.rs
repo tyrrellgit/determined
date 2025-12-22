@@ -5,55 +5,15 @@
 //! 
 
 use crate::common::na as na;
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 use crate::measurement::Observation;
 use crate::state::{ State, StatePtr };
 
-use crate::linalg::{ moore_penrose_right_inverse };
+use crate::common::linalg::{ moore_penrose_right_inverse };
 
-pub trait DefaultFromState{
-
-    type DefaultType;
-    type StateType;
-
-    fn default_from_state(state: Self::StateType) -> Self::DefaultType;
-}
-
-/// State transition model trait.
-pub trait TransitionModel<N> 
-where
-    N: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
-        + na::allocator::Allocator<N, N>,
-{
-    /// x(t) -> x(t')
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<N>;
-
-    /// Jacobian df/dx (N x N)
-    fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, N, N>;
-}
-
-/// Measurement model trait.
-pub trait MeasurementModel<const N: usize, const M: usize> {
-    /// measurement projection h(x) -> z
-    fn projection(&self, state: &State<na::Const<N>>) -> Observation<na::Const<M>>;
-
-    /// inverse measurement model h^-1(z) -> x
-    fn inverse(&self, obs: &Observation<na::Const<M>>) -> State<na::Const<N>>;
-
-    /// Jacobian dh/dx (M x N)
-    fn jacobian(&self, x: &na::SMatrix<f64, N, 1>) -> na::SMatrix<f64, M, N>;
-}
-
-/// Update model trait.
-pub trait UpdateModel<const N: usize, const M: usize> {
-
-    /// Compute updated gains
-    fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>>;
-
-    /// Jacobian dh/dx (M x N)
-    fn jacobian(&self, x: &na::SMatrix<f64, N, 1>) -> na::SMatrix<f64, M, N>;
-}
+use crate::models::traits::{ 
+    TransitionModel, MeasurementModel, UpdateModel, DefaultFromState
+};
 
 // Transition Models
 // Linear (Discrete Time)
@@ -180,7 +140,7 @@ impl<const N: usize, const M: usize> Default for LinearMeasurement<N, M> {
     }
 }
 
-impl<const N: usize, const M: usize> MeasurementModel<N, M> for LinearMeasurement<N, M> {
+impl<const N: usize, const M: usize> MeasurementModel<na::Const<N>, na::Const<M>> for LinearMeasurement<N, M> {
     fn projection(&self, state: &State<na::Const<N>>) -> Observation<na::Const<M>> {
         Observation {
             value: self.h * &state.value,
@@ -196,7 +156,7 @@ impl<const N: usize, const M: usize> MeasurementModel<N, M> for LinearMeasuremen
         }
     }
 
-    fn jacobian(&self, _x: &na::SMatrix<f64, N, 1>) -> na::SMatrix<f64, M, N> {
+    fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
         self.h.clone() // TODO: code proper jacobian
     }
 }

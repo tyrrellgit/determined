@@ -2,116 +2,20 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use numpy::{ PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2 };
+use numpy::{ PyArray1, PyArray2 };
 use numpy::{ ToPyArray ,PyArrayMethods };
 
 use crate::common::na as na;
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 use crate::models::TransitionModel;
 use crate::state::{State, StatePtr};
+
+use crate::python::epoch::PyEpoch;
+use crate::python::state::PyState;
 
 /// Array types bound to python
 type PyVector<'py> = Bound<'py, PyArray1<f64>>;
 type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
-
-
-#[pyclass(name="Epoch")]
-#[derive(Clone, Debug)]
-pub struct PyEpoch {
-    inner: Epoch,
-}
-
-#[pyclass(name="State")]
-#[derive(Clone, Debug)]
-pub struct PyState {
-    inner: StatePtr<na::Dyn>,
-}
-
-#[pymethods]
-impl PyEpoch {
-    #[new]
-    fn new(value: i64) -> PyEpoch {
-        PyEpoch{
-            inner: Epoch::new(value)
-        }
-    }  
-
-    #[getter]
-    fn value(&self) -> i64 {
-        self.inner.value
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-}
-
-#[pymethods]
-impl PyState {
-    
-    #[new]
-    fn new(
-        value: PyReadonlyArray1<f64>,
-        covariance: Option<PyReadonlyArray2<f64>>,
-        epoch: &PyEpoch
-    ) -> PyResult<Self> {
-        
-    // numpy -> ndarray (zero-copy view) -> nalgebra
-    let array = value.as_array();
-    let vector = na::DVector::<f64>::from_iterator(
-        array.len(),
-        array.iter().copied()
-    );
-    
-    // Same for covariance
-    let cov = covariance.map(|cov| {
-        let nd_cov = cov.as_array();
-        let (nrows, ncols) = nd_cov.dim();
-        
-        // ndarray -> nalgebra (single copy, row-major)
-        na::DMatrix::<f64>::from_iterator(
-            nrows,
-            ncols,
-            nd_cov.iter().copied()
-        )
-    });
-        
-        Ok(PyState {
-            inner: State {
-                value: vector,
-                covariance: cov,
-                epoch: epoch.inner,
-            }.ptr()
-        })
-    }
-
-    #[getter]
-    fn value<'py>(&self, py: Python<'py>) -> PyVector<'py> {
-        // nalgebra -> numpy
-        let state = self.inner.read().unwrap();
-        state.value.as_slice().to_pyarray(py)
-    }
-
-    #[getter]
-    fn epoch(&self) -> i64 {
-        let state = self.inner.read().unwrap();
-        state.epoch.value
-    }
-
-    #[getter]
-    fn covariance<'py>(&self, py: Python<'py>) -> Option<PyMatrix<'py>> {
-        let state = self.inner.read().unwrap();
-        state.covariance.as_ref().map(|cov| {
-            cov.as_slice().to_pyarray(py)
-                .reshape([cov.nrows(), cov.ncols()])
-                .unwrap()
-        })
-    }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:0.6}", self.inner.read().unwrap()))
-    }
-}
 
 // Wrapper for Python-defined state transition - DYNAMIC only
 #[pyclass(name="TransitionModel")]
@@ -124,8 +28,8 @@ pub struct PyTransitionModel {
 impl PyTransitionModel {
 
     #[new]
-    pub fn new(py_obj: Py<PyAny>, state: PyState) -> Self {
-        PyTransitionModel { py_obj, state }
+    pub fn new(model: Py<PyAny>, state: PyState) -> Self {
+        PyTransitionModel { py_obj: model, state }
     }
 
     #[pyo3(name="state")]
@@ -200,13 +104,4 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
             )
         })
     }
-}
-
-///TODO Measurement model, Update Model, KalmanFilter
-#[pymodule]
-fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyEpoch>()?;
-    m.add_class::<PyState>()?;
-    m.add_class::<PyTransitionModel>()?;
-    Ok(())
 }

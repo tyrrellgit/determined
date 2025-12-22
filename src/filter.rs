@@ -1,6 +1,6 @@
 //! `Filter` is a trait for basic algorithms. 
 
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 
 /// Core Filter trait shared across algorithm implementations.
 ///
