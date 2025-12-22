@@ -11,5 +11,4 @@ cov = np.array([
 epoch = dt.Epoch(0)
 state = dt.State(value, cov, epoch)
 
-print(epoch)
 print(state)
