@@ -199,7 +199,7 @@ impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
     }
 }
 
-impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
+impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for LinearUpdate<N, M> {
 
     fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>> {
 
@@ -241,7 +241,7 @@ impl<const N: usize, const M: usize> UpdateModel<N, M> for LinearUpdate<N, M> {
 
     }
 
-    fn jacobian(&self, _x: &na::SMatrix<f64, N, 1>) -> na::SMatrix<f64, M, N> {
+    fn jacobian(&self, _x: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
         self.measurement.h.clone()
     }
 }

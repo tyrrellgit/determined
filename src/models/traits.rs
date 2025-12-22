@@ -37,7 +37,6 @@ where
     N: na::Dim,
     M: na::Dim,
     na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
-        + na::allocator::Allocator<N, na::U1>
         + na::allocator::Allocator<M, na::U1>
         + na::allocator::Allocator<N, N>
         + na::allocator::Allocator<M, M>
@@ -54,11 +53,20 @@ where
 }
 
 /// Update model trait.
-pub trait UpdateModel<const N: usize, const M: usize> {
+pub trait UpdateModel<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
+        + na::allocator::Allocator<M, na::U1>
+        + na::allocator::Allocator<N, N>
+        + na::allocator::Allocator<M, M>
+        + na::allocator::Allocator<M, N> 
+{
 
     /// Compute updated gains
-    fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>>;
+    fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N>;
 
     /// Jacobian dh/dx (M x N)
-    fn jacobian(&self, x: &na::SMatrix<f64, N, 1>) -> na::SMatrix<f64, M, N>;
+    fn jacobian(&self, x: &State<N>) -> na::OMatrix<f64, M, N>;
 }

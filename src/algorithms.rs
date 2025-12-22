@@ -22,7 +22,7 @@ use crate::models::{
 pub struct KalmanFilterTUH<const N: usize, const M: usize, T, U, H>
 where
     T: TransitionModel<na::Const<N>>,
-    U: UpdateModel<N, M>,
+    U: UpdateModel<na::Const<N>, na::Const<M>>,
     H: MeasurementModel<na::Const<N>, na::Const<M>>,
 {
     pub state: StatePtr<na::Const<N>>,
@@ -36,7 +36,7 @@ impl<const N: usize, const M: usize, T, U, H> KalmanFilterTUH<N, M, T, U, H>
 where
     T: TransitionModel<na::Const<N>>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
-    U: UpdateModel<N, M>
+    U: UpdateModel<na::Const<N>, na::Const<M>>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = U>,
     H: MeasurementModel<na::Const<N>, na::Const<M>> + Default,
 {
@@ -68,7 +68,7 @@ where
 impl<const N: usize, const M: usize, T, U, H> Filter for KalmanFilterTUH<N, M, T, U, H>
 where
     T: TransitionModel<na::Const<N>>,
-    U: UpdateModel<N, M>,
+    U: UpdateModel<na::Const<N>, na::Const<M>>,
     H: MeasurementModel<na::Const<N>, na::Const<M>>,
 {
     type StateType = StatePtr<na::Const<N>>;

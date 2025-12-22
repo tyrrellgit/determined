@@ -32,11 +32,12 @@ h = np.array([
 model = DummyMeasurement(h)
 measurement = dt.MeasurementModel(model)
 
-obs = measurement.projection(state)
-inv = measurement.inverse(obs)
-jac = measurement.jacobian(state)
+if __name__ == "__main__":
+    obs = measurement.projection(state)
+    inv = measurement.inverse(obs)
+    jac = measurement.jacobian(state)
 
-print(state)
-print(obs)
-print(inv)
-print(jac)
+    print(state)
+    print(obs)
+    print(inv)
+    print(jac)

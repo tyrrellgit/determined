@@ -103,15 +103,7 @@ impl PyMeasurementModel {
 
 impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
     fn projection(&self, state: &State<na::Dyn>) -> Observation<na::Dyn> {
-
-        let py_state = PyState {
-                inner: State {
-                    value: state.value.clone(),
-                    covariance: state.covariance.clone(),
-                    epoch: state.epoch,
-                }
-                .ptr(),
-            };
+        let py_state = PyState { inner: state.ptr() };
 
         Python::attach(|py| {
             let py_obj = self.py_obj.bind(py);
@@ -161,17 +153,17 @@ impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
     }
 
     fn jacobian(&self, state: &State<na::Dyn>) -> na::OMatrix<f64, na::Dyn, na::Dyn> {
+        let py_state = PyState{ inner: state.ptr() };
+        
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
-            let vec: PyVector<'_> = state.value.as_slice().to_pyarray(py);
-            
+            let py_obj = self.py_obj.bind(py);            
             let result = py_obj
                 .call_method(
                     "jacobian",
-                    (vec,),
-                    None
-                )
+                    (py_state,),
+                    None)
                 .expect("Failed to call jacobian()");
+            
             let result_vec: PyMatrix<'_> = result
                 .extract()
                 .expect("jacobian() must return <ndarray>");

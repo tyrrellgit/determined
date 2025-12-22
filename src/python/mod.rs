@@ -4,10 +4,11 @@ pub mod epoch;
 pub mod state;
 pub mod transition;
 pub mod measurement;
+pub mod update;
 
 use pyo3::prelude::*;
 
-///TODO Measurement model, Update Model, KalmanFilter
+///TODO: Update Model, KalmanFilter
 #[pymodule]
 fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Structs
@@ -18,6 +19,7 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Models
     m.add_class::<transition::PyTransitionModel>()?;
     m.add_class::<measurement::PyMeasurementModel>()?;
+    m.add_class::<update::PyUpdateModel>()?;
     
     Ok(())
 }
