@@ -5,6 +5,7 @@ pub mod state;
 pub mod transition;
 pub mod measurement;
 pub mod update;
+pub mod algorithms;
 
 use pyo3::prelude::*;
 
@@ -21,5 +22,7 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<measurement::PyMeasurementModel>()?;
     m.add_class::<update::PyUpdateModel>()?;
     
+    // Algorithms
+
     Ok(())
 }
