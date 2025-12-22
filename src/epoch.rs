@@ -9,7 +9,7 @@ pub use nalgebra as na;
 pub use crate::common::Composable;
 
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Epoch {
     pub value: i64, // signed to allow negative time
 }
@@ -18,12 +18,6 @@ impl Epoch {
     pub fn new(value: i64) -> Self {
         Epoch { value }
     }   
-}
-
-impl Default for Epoch {
-    fn default() -> Self {
-        Epoch { value: 0 }
-    }
 }
 
 impl Add for Epoch {

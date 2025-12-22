@@ -97,7 +97,7 @@ fn main() {
     let h = kf.measurement.h;
     let mut x_true = na::SVector::<f64, 4>::new(1.0, 0.0, 0.0, 0.0);
     
-    let num_steps = 100;
+    let num_steps = 100 as i64;
     let epoch = Epoch { value: 0 };
     let noise_std_dev = 0.05;
     

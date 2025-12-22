@@ -28,12 +28,12 @@ impl PyUpdateModel {
     pub fn new(model: Py<PyAny>, state: PyState) -> Self {
         PyUpdateModel {
             py_obj: model,
-            state: state
+            state
         }
     }
 
     #[pyo3(name="apply")]
-    fn apply_update<'py>(&mut self, observation: &'py PyObservation) -> PyState {
+    fn apply_update(&mut self, observation: &PyObservation) -> PyState {
         let obs = &observation.inner;
         let state = self.apply(obs).clone();
         PyState { inner: state }

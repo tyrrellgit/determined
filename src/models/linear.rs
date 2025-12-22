@@ -79,23 +79,22 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
         if delta > 0 {
             // propagate forward
             for _ in 0..delta {
-                state.value = &self.f * &state.value;
-
-                state.covariance = Some(&self.f * cov * &self.f.transpose() + &self.q);
+                state.value = self.f * state.value;
+                state.covariance = Some(self.f * cov * self.f.transpose() + self.q);
             }
         } else {
             // propagate backward
             let f_inv = self.f_inv();
             for _ in 0..delta.abs() {
-                state.value = &f_inv * &state.value;
-                state.covariance = Some(&f_inv * (cov - &self.q) * &f_inv.transpose());
+                state.value = f_inv * state.value;
+                state.covariance = Some(f_inv * (cov - self.q) * f_inv.transpose());
             }
         };
         &self.state
     }
 
     fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, N, N> {
-        self.f.clone()
+        self.f
     }
 }
 
@@ -119,10 +118,10 @@ impl<const N: usize, const M: usize> LinearMeasurement<N, M> {
             Some(h_inv) => h_inv,
         };
         LinearMeasurement {
-            h: h,
-            r: r,
+            h,
+            r,
             h_t: h.transpose(),
-            h_inv: h_inv,
+            h_inv,
         }
     }
 }
@@ -143,21 +142,21 @@ impl<const N: usize, const M: usize> Default for LinearMeasurement<N, M> {
 impl<const N: usize, const M: usize> MeasurementModel<na::Const<N>, na::Const<M>> for LinearMeasurement<N, M> {
     fn projection(&self, state: &State<na::Const<N>>) -> Observation<na::Const<M>> {
         Observation {
-            value: self.h * &state.value,
+            value: self.h * state.value,
             epoch: state.epoch
         }
     }
 
     fn inverse(&self, obs: &Observation<na::Const<M>>) -> State<na::Const<N>> {
         State {
-            value: &self.h_inv * &obs.value,
+            value: self.h_inv * obs.value,
             covariance: None,
             epoch: obs.epoch,
         }
     }
 
     fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
-        self.h.clone() // TODO: code proper jacobian
+        self.h // TODO: code proper jacobian
     }
 }
 
@@ -216,7 +215,7 @@ impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for
         // compute gain matrix
         let h = &self.measurement.h;
         let h_t = &self.measurement.h_t;
-        let s = h * cov * h_t + &self.measurement.r;
+        let s = h * cov * h_t + self.measurement.r;
         let s_inv = match s.try_inverse(){
             None => {
                 spdlog::error!(
@@ -232,16 +231,16 @@ impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for
         let y = z - z_x;
         
         // Update state
-        state.value = &state.value + &k * y;
+        state.value = state.value + k * y;
 
         // Update Covariance
-        state.covariance = Some((self.identity - &k * h) * cov);
+        state.covariance = Some((self.identity - k * h) * cov);
 
         &self.state
 
     }
 
     fn jacobian(&self, _x: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
-        self.measurement.h.clone()
+        self.measurement.h
     }
 }

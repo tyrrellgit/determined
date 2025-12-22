@@ -121,13 +121,13 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Format `value`, `covariance`, and `epoch` as desired
-        write!(f, "State:\n")?;
-        write!(f, "‾‾‾‾‾‾\n")?;
+        writeln!(f, "State:")?;
+        writeln!(f, "‾‾‾‾‾‾")?;
         write!(f, "  Value: {:0.6}", self.value)?; // or custom formatting
         let _ = match &self.covariance {
             Some(cov) => write!(f, "  Covariance: {:0.6}", cov),
             None => write!(f, "  Covariance: None"),
         };
-        write!(f, "  Epoch: {}\n", self.epoch.value)
+        writeln!(f, "  Epoch: {}", self.epoch.value)
     }
 }

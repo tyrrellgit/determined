@@ -37,12 +37,12 @@ impl PyKalmanFilter {
     }
 
     #[pyo3(name="predict")]
-    fn predict_state<'py>(&mut self, observation: &'py PyObservation) -> PyState {
+    fn predict_state(&mut self, observation: &PyObservation) -> PyState {
         todo!()
     }
 
     #[pyo3(name="update")]
-    fn update_state<'py>(&mut self, observation: &'py PyObservation) -> PyState {
+    fn update_state(&mut self, observation: &PyObservation) -> PyState {
         todo!()
     }
 

@@ -14,3 +14,6 @@ nalgebra = "0.34.1"
 [lib]
 name = "determined"
 crate-type = ["lib", "cdylib"]
+
+[profile.release]
+debug = true

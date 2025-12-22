@@ -75,14 +75,14 @@ where
     type ObservationType = Observation<na::Const<M>>;
 
     fn predict(&mut self, _epoch: &Epoch) -> Self::StateType {
-        self.transition.state(&_epoch).clone()
+        self.transition.state(_epoch).clone()
     }
 
-    fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> Self::StateType {
+    fn update(&mut self, observation: &Self::ObservationType) -> Self::StateType {
         self.update.apply(observation).clone()
     }
 
-    fn state<'a>(&'a self) -> Self::StateType {
+    fn state(&self) -> Self::StateType {
         self.state.clone()
     }
 

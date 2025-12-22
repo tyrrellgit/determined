@@ -28,9 +28,9 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Format `value`, `covariance`, and `epoch` as desired
-        write!(f, "Observation:\n")?;
-        write!(f, "‾‾‾‾‾‾‾‾‾‾‾‾\n")?;
+        writeln!(f, "Observation:")?;
+        writeln!(f, "‾‾‾‾‾‾‾‾‾‾‾‾")?;
         write!(f, "  Value: {:0.6}", self.value)?; 
-        write!(f, "  Epoch: {}\n", self.epoch.value)
+        writeln!(f, "  Epoch: {}", self.epoch.value)
     }
 }

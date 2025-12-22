@@ -32,7 +32,7 @@ impl PyTransitionModel {
     }
 
     #[pyo3(name="state")]
-    fn state_transition<'py>(&mut self, epoch: &'py PyEpoch) -> PyState {
+    fn state_transition(&mut self, epoch: &PyEpoch) -> PyState {
         let state = self.state(&epoch.inner).clone();
         PyState { inner: state }
     }
