@@ -23,6 +23,7 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<update::PyUpdateModel>()?;
     
     // Algorithms
+    m.add_class::<algorithms::PyKalmanFilter>()?;
 
     Ok(())
 }

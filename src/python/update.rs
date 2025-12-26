@@ -33,6 +33,12 @@ impl PyUpdateModel {
         }
     }
 
+    #[pyo3(name="state")]
+    fn state_transition(&mut self, epoch: &PyEpoch) -> PyState {
+        let state = self.state(&epoch.inner);
+        PyState { inner: state.clone() }
+    }
+
     #[pyo3(name="apply")]
     fn apply_update(&mut self, observation: &PyObservation) -> PyState {
         let obs = &observation.inner;
