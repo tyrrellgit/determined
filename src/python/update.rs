@@ -10,6 +10,7 @@ use crate::measurement::Observation;
 use crate::models::UpdateModel;
 use crate::state::{ State, StatePtr };
 
+use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
 use crate::python::measurement::PyObservation;
 
@@ -51,6 +52,33 @@ impl PyUpdateModel {
 }
 
 impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
+
+    fn state(&mut self, epoch: &crate::epoch::Epoch) -> &StatePtr<na::Dyn> {
+
+        let mut state = self.state.inner.write().unwrap();
+        let py_epoch =  PyEpoch{ inner: *epoch };
+
+        Python::attach(|py| {
+            let py_obj = self.py_obj.bind(py);
+            
+            // Call Python method with state and epoch
+            let result = py_obj
+                .call_method("state", (py_epoch,), None)
+                .expect("Failed to call state()");
+            
+            let result_state: PyState = result
+                .extract()
+                .expect("state() must return <State>");
+            
+            let _state = result_state.inner.read().unwrap();
+
+            state.value = _state.value.clone();
+            state.covariance = _state.covariance.clone();
+            state.epoch = *epoch;
+
+        });
+        &self.state.inner
+    }
 
     fn apply(&mut self, observation: &Observation<na::Dyn>) -> &StatePtr<na::Dyn> {
         

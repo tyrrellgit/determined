@@ -153,7 +153,7 @@ impl<const N: usize, const M: usize> MeasurementModel<na::Const<N>, na::Const<M>
             covariance: None,
             epoch: obs.epoch,
         }
-    }
+    } // TODO: probably dont need this since its could often be ill-defined
 
     fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
         self.h // TODO: code proper jacobian
@@ -200,6 +200,10 @@ impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
 
 impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for LinearUpdate<N, M> {
 
+    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
+        self.transition.state(epoch)
+    }
+    
     fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>> {
 
         // propagate state to observation epoch

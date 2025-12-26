@@ -15,7 +15,7 @@ fn test_kalman_update_scalar() {
         Epoch::new(0)).ptr();
 
     let mut filter = KalmanFilterNM::<1, 1>::default_from_state(x);
-    // initial state x = 0
+    // initial state x = 0 with noise and measurement matrices as identity
 
     assert_eq!(filter.state().read().unwrap().value[(0, 0)], 0.0);
 
@@ -28,8 +28,6 @@ fn test_kalman_update_scalar() {
     { let _ = filter.predict(&Epoch::new(1)); }
 
     // measurement update
-    filter.measurement.h = na::SMatrix::<f64, 1, 1>::identity();
-    filter.measurement.r = na::SMatrix::<f64, 1, 1>::identity();
     let _ = filter.update(&obs);
 
     // With P=I, R=I, H=I we expect K = 1/2 and x -> 0.5
@@ -48,8 +46,6 @@ fn test_kalman_update_2d() {
 
     // N=2, M=1. Observe only the first state element.
     let mut filter = KalmanFilterNM::<2, 1>::default_from_state(x);
-    
-    filter.measurement.h = na::SMatrix::<f64, 1, 2>::from_row_slice(&[1.0, 0.0]);
 
     let obs = Observation{
         value: na::SMatrix::<f64, 1, 1>::from_row_slice(&[2.0]),
