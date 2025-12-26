@@ -10,9 +10,6 @@ class LinearUpdate:
         self.t = t
         self.m = m
 
-    def state(self, epoch: dt.Epoch):
-        return self.t.state(epoch)
-
     def apply(self, observation: dt.Observation):
 
         # propagate state to epoch
@@ -51,7 +48,8 @@ state = dt.State(value, np.eye(value.size), epoch)
 obs = dt.Observation(np.array([0.0, 1.0]), epoch)
 
 model = LinearUpdate(transition, measurement)
-update = dt.UpdateModel(model, state)
+
+update = dt.UpdateModel(model, transition, measurement)
 
 
 if __name__ == "__main__":

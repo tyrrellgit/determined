@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use numpy::{ PyArray1, PyArray2, PyReadonlyArray1 };
+use numpy::{ PyReadonlyArray1 };
 use numpy::{ ToPyArray ,PyArrayMethods };
 
 use crate::common::na as na;
@@ -12,16 +12,14 @@ use crate::state::State;
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
+use crate::python::arrays::{ PyVector, PyMatrix };
 
-/// Array types bound to python
-type PyVector<'py> = Bound<'py, PyArray1<f64>>;
-type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
 
 #[pyclass(name="Observation")]
 #[derive(Clone, Debug)]
 pub struct PyObservation {
     pub inner: Observation<na::Dyn>,
-}
+} 
 
 #[pymethods]
 impl PyObservation {
@@ -66,7 +64,18 @@ impl PyObservation {
 // Wrapper for Python-defined Measurement models
 #[pyclass(name="MeasurementModel")]
 pub struct PyMeasurementModel {
-    py_obj: Py<PyAny>,
+    pub model: Py<PyAny>,
+}
+
+impl Clone for PyMeasurementModel {
+    fn clone(&self) -> Self {
+        Python::attach(| py| {
+            let _ref = self.model.clone_ref(py);
+            Self {
+                model: _ref,
+            }
+        })
+    }
 }
 
 #[pymethods]
@@ -74,12 +83,12 @@ impl PyMeasurementModel {
     
     #[new]
     pub fn new(model: Py<PyAny>) -> Self {
-        PyMeasurementModel { py_obj: model }
+        PyMeasurementModel { model: model }
     }
 
     #[getter]
     fn get_model(&self) -> &Py<PyAny> {
-        &self.py_obj
+        &self.model
     }
 
     #[pyo3(name="projection")]
@@ -111,7 +120,7 @@ impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
         let py_state = PyState { inner: state.ptr() };
 
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
+            let py_obj = self.model.bind(py);
             
             let result = py_obj
                 .call_method(
@@ -139,7 +148,7 @@ impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
             };
 
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
+            let py_obj = self.model.bind(py);
 
             let result = py_obj
                 .call_method(
@@ -161,7 +170,7 @@ impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
         let py_state = PyState{ inner: state.ptr() };
         
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);            
+            let py_obj = self.model.bind(py);            
             let result = py_obj
                 .call_method(
                     "jacobian",

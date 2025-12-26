@@ -4,14 +4,13 @@ import determined as dt
 
 from update import update
 
-
 value = np.array([1.0, 0.0])
 epoch = dt.Epoch(0)
 
 state = dt.State(value, np.eye(value.size), epoch)
 obs = dt.Observation(np.array([0.0, 1.0]), epoch)
 
-filter = dt.KalmanFilter(update, state)
+filter = dt.KalmanFilter(update)
 
 if __name__ == "__main__":
 

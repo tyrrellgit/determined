@@ -2,8 +2,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use numpy::{ PyArray2 };
-use numpy::{ ToPyArray ,PyArrayMethods };
+use numpy::{ ToPyArray, PyArrayMethods };
 
 use crate::common::na as na;
 use crate::epoch::Epoch;
@@ -12,15 +11,26 @@ use crate::state::{State, StatePtr};
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
+use crate::python::arrays::{ PyMatrix };
 
-/// Array types bound to python
-type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
 
 // Wrapper for Python-defined state transition - DYNAMIC only
 #[pyclass(name="TransitionModel")]
 pub struct PyTransitionModel {
-    py_obj: Py<PyAny>,
-    state: PyState, 
+    pub model: Py<PyAny>,
+    pub state: PyState, 
+}
+
+impl Clone for PyTransitionModel {
+    fn clone(&self) -> Self {
+        Python::attach(| py| {
+            let _ref = self.model.clone_ref(py);
+            Self {
+                state: self.state.clone(),
+                model: _ref,
+            }
+        })
+    }
 }
 
 #[pymethods]
@@ -28,12 +38,12 @@ impl PyTransitionModel {
 
     #[new]
     pub fn new(model: Py<PyAny>, state: PyState) -> Self {
-        PyTransitionModel { py_obj: model, state }
+        PyTransitionModel { model: model, state }
     }
 
     #[getter]
     fn get_model(&self) -> &Py<PyAny> {
-        &self.py_obj
+        &self.model
     }
 
     #[pyo3(name="state")]
@@ -58,11 +68,10 @@ impl PyTransitionModel {
 impl TransitionModel<na::Dyn> for PyTransitionModel {
     fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Dyn> {
 
-        let mut state = self.state.inner.write().unwrap();
         let py_epoch = PyEpoch{ inner: *epoch };
         
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
+            let py_obj = self.model.bind(py);
             
             // Call Python method with state and epoch
             let result = py_obj
@@ -75,9 +84,12 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
             
             let _state = result_state.inner.read().unwrap();
 
-            state.value = _state.value.clone();
-            state.covariance = _state.covariance.clone();
-            state.epoch = *epoch;
+            {   // lock and update state
+                let mut state = self.state.inner.write().unwrap();
+                state.value = _state.value.clone();
+                state.covariance = _state.covariance.clone();
+                state.epoch = *epoch;
+            }
 
         });
         &self.state.inner
@@ -87,7 +99,7 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
         let py_state = PyState{ inner: state.ptr() };
 
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
+            let py_obj = self.model.bind(py);
             let result = py_obj
                 .call_method(
                     "jacobian",

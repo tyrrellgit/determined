@@ -2,40 +2,67 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use numpy::{ PyArray2 };
-use numpy::{ ToPyArray ,PyArrayMethods };
+use numpy::{ ToPyArray, PyArrayMethods };
 
 use crate::common::na;
 use crate::measurement::Observation;
-use crate::models::UpdateModel;
+use crate::models::{TransitionModel, UpdateModel};
 use crate::state::{ State, StatePtr };
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
-use crate::python::measurement::PyObservation;
+use crate::python::transition::PyTransitionModel;
+use crate::python::measurement::{PyMeasurementModel, PyObservation};
+use crate::python::arrays::{ PyMatrix };
 
-/// Array types bound to python
-type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
 
 #[pyclass(name="UpdateModel")]
 pub struct PyUpdateModel {
-    py_obj: Py<PyAny>,
-    state: PyState,
+    pub model: Py<PyAny>,
+    pub state: PyState,
+    pub transition: PyTransitionModel,
+    pub measurement: PyMeasurementModel,
+}
+
+impl Clone for PyUpdateModel {
+    fn clone(&self) -> Self {
+        Python::attach(| py| {
+            let _ref = self.model.clone_ref(py);
+            Self {
+                model: _ref,
+                state: self.state.clone(),
+                transition: self.transition.clone(),
+                measurement: self.measurement.clone(),
+            }
+        })
+    }
 }
 
 #[pymethods]
 impl PyUpdateModel {
     #[new]
-    pub fn new(model: Py<PyAny>, state: PyState) -> Self {
-        PyUpdateModel {
-            py_obj: model,
-            state
-        }
+    pub fn new(
+        model: Py<PyAny>,
+        transition: Py<PyTransitionModel>,
+        measurement: Py<PyMeasurementModel>) -> Self {
+        
+        Python::attach(|py| {
+
+            let _transition: PyTransitionModel = transition.extract(py).unwrap();
+            let _measurement: PyMeasurementModel = measurement.extract(py).unwrap();
+
+            PyUpdateModel {
+                model: model,
+                state: _transition.state.clone(),
+                transition: _transition,
+                measurement: _measurement,
+            }
+        })
     }
 
     #[getter]
     fn get_model(&self) -> &Py<PyAny> {
-        &self.py_obj
+        &self.model
     }
 
     #[pyo3(name="state")]
@@ -65,39 +92,15 @@ impl PyUpdateModel {
 impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
 
     fn state(&mut self, epoch: &crate::epoch::Epoch) -> &StatePtr<na::Dyn> {
-
-        let mut state = self.state.inner.write().unwrap();
-        let py_epoch =  PyEpoch{ inner: *epoch };
-
-        Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
-            
-            // Call Python method with state and epoch
-            let result = py_obj
-                .call_method("state", (py_epoch,), None)
-                .expect("Failed to call state()");
-            
-            let result_state: PyState = result
-                .extract()
-                .expect("state() must return <State>");
-            
-            let _state = result_state.inner.read().unwrap();
-
-            state.value = _state.value.clone();
-            state.covariance = _state.covariance.clone();
-            state.epoch = *epoch;
-
-        });
-        &self.state.inner
+        self.transition.state(epoch)
     }
 
     fn apply(&mut self, observation: &Observation<na::Dyn>) -> &StatePtr<na::Dyn> {
         
-        let mut state = self.state.inner.write().unwrap();
         let py_obs = PyObservation{ inner: observation.clone() };
         
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);
+            let py_obj = self.model.bind(py);
             
             // Call Python method with state and epoch
             let result = py_obj
@@ -112,10 +115,13 @@ impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
                 .expect("apply() must return <State>");
             
             let _state = result_state.inner.read().unwrap();
-
-            state.value = _state.value.clone();
-            state.covariance = _state.covariance.clone();
-            state.epoch = _state.epoch;
+            
+            {   // lock and update state
+                let mut state = self.state.inner.write().unwrap();
+                state.value = _state.value.clone();
+                state.covariance = _state.covariance.clone();
+                state.epoch = _state.epoch;
+            }
 
         });
         &self.state.inner
@@ -125,7 +131,7 @@ impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
         let py_state = PyState{ inner: state.ptr() };
 
         Python::attach(|py| {
-            let py_obj = self.py_obj.bind(py);           
+            let py_obj = self.model.bind(py);           
             let result = py_obj
                 .call_method(
                     "jacobian",

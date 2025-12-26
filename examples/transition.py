@@ -8,7 +8,7 @@ class LinearTransition:
         self.q = q
 
         self._state = initial_state
-        self._jac = np.zeros((self.f.size, self.f.size))
+        self._jac = np.zeros((self.f.shape[0], self.f.shape[0]))
 
     def state(self, epoch: dt.Epoch):
 
@@ -23,20 +23,15 @@ class LinearTransition:
         return self._jac
 
 value = np.array([1.0, 0.0])
-cov = np.array([
-    [1.0, 0.0],
-    [0.0, 1.0]
-])
+cov = np.eye(value.size)
 
 epoch = dt.Epoch(0)
 state = dt.State(value, cov, epoch)
 initial_state = dt.State(value, cov, epoch)
 
-f = np.array([1.5, 2.0])
-q = np.eye(f.size)
+f = np.diag(np.array([1.5, 2.0]))
+q = np.eye(f.shape[0])
 
-# coupling of initial_state and state is a poor design choice
-# --> results in deadlocks as TransitionModel needs to lock and mutate state
 model = LinearTransition(f, q, initial_state)
 transition = dt.TransitionModel(model, state)
 

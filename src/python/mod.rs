@@ -6,6 +6,7 @@ pub mod transition;
 pub mod measurement;
 pub mod update;
 pub mod algorithms;
+pub mod arrays;
 
 use pyo3::prelude::*;
 

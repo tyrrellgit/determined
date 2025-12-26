@@ -37,6 +37,7 @@ def setup_two_mass_spring_damper_params():
     b = 0.0036
 
     x0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+    initial_state =  dt.State(x0, np.eye(x0.size), dt.Epoch(0))
 
     a = np.array([
         [0.0, 1.0, 0.0, 0.0],
@@ -53,8 +54,8 @@ def setup_two_mass_spring_damper_params():
     sigma_q = np.diag([0.3 * _dt, 0.05 * _dt, 0.3 * _dt, 0.05 * _dt])
     q = sigma_q @ sigma_q.T
 
-    transition_model = LinearTransition(f, q, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
-    transition = dt.TransitionModel(transition_model, dt.State(x0, np.eye(x0.size), dt.Epoch(0))) 
+    transition_model = LinearTransition(f, q, initial_state)
+    transition = dt.TransitionModel(transition_model, initial_state) 
     
     # measurement model
     h = np.array([
@@ -70,10 +71,10 @@ def setup_two_mass_spring_damper_params():
 
     # update model
     update_model = LinearUpdate(transition, measurement)
-    update = dt.UpdateModel(update_model, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
+    update = dt.UpdateModel(update_model, transition, measurement)
 
     # filter
-    kf = dt.KalmanFilter(update, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
+    kf = dt.KalmanFilter(update)
 
     # system models
     process_noise=0.00,

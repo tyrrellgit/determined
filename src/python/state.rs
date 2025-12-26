@@ -1,16 +1,13 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use pyo3::prelude::*;
-use numpy::{ PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2 };
-use numpy::{ ToPyArray ,PyArrayMethods };
+use numpy::{ PyReadonlyArray1, PyReadonlyArray2 };
+use numpy::{ ToPyArray, PyArrayMethods };
 
 use crate::common::na as na;
 use crate::python::epoch::PyEpoch;
 use crate::state::{State, StatePtr};
-
-/// Array types bound to python
-type PyVector<'py> = Bound<'py, PyArray1<f64>>;
-type PyMatrix<'py> = Bound<'py, PyArray2<f64>>;
+use crate::python::arrays::{ PyVector, PyMatrix };
 
 
 #[pyclass(name="State")]

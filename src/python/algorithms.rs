@@ -3,7 +3,6 @@
 use spdlog;
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
 
 use crate::common::na as na;
 use crate::filter::Filter;
@@ -11,25 +10,34 @@ use crate::epoch::Epoch;
 use crate::measurement::Observation;
 use crate::state::StatePtr;
 
+use crate::models::traits::UpdateModel;
+
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
 use crate::python::measurement::PyObservation;
+use crate::python::update::PyUpdateModel;
 
 
 #[pyclass(name="KalmanFilter")]
 pub struct PyKalmanFilter {
-    update: Py<PyAny>,
+    update: PyUpdateModel,
     state: PyState,
 }
 
 #[pymethods]
 impl PyKalmanFilter {
     #[new]
-    pub fn new(update: Py<PyAny>, state: PyState) -> Self {
-        PyKalmanFilter {
-            update: update,
-            state: state
-        }
+    pub fn new(update: Py<PyUpdateModel>) -> Self {
+        Python::attach(| py| {
+            let _update: PyUpdateModel = update.extract(py).unwrap();
+            let _state: PyState = update.borrow(py).state.clone();
+
+            PyKalmanFilter {
+                update: _update,
+                state: _state
+            }
+        })
+
     }
 
     #[pyo3(name="predict")]
@@ -74,63 +82,12 @@ impl Filter for PyKalmanFilter {
     type StateType = StatePtr<na::Dyn>;
 
     fn predict(&mut self, epoch: &Epoch) -> Self::StateType {
-
-        let py_epoch = PyEpoch { inner: *epoch };
-
-        Python::attach(| py | {
-
-            let mut state = self.state.inner.write().unwrap();
-
-            let py_obj = self.update.bind(py);
-            let result = py_obj
-                .call_method("state", (py_epoch,), None)
-                .expect("Failed to call update.state()");
-
-            let result_state: PyState = result
-                .extract()
-                .expect("update.state() must return <State>");
-
-            let _state = result_state.inner.read().unwrap();
-
-            // Update internal state
-            state.value = _state.value.clone();
-            state.covariance = _state.covariance.clone();
-            state.epoch = *epoch;
-
-        });
-
         // return a reference counted ptr
-        self.state.inner.clone()
+        self.update.state(epoch).clone()
     }
 
     fn update(&mut self, observation: &Observation<na::Dyn>) -> Self::StateType {
-
-        let py_observation = PyObservation { inner: observation.clone() };
-
-        Python::attach(| py | {
-            
-            let mut state = self.state.inner.write().unwrap();
-
-            let py_obj = self.update.bind(py);
-            let result = py_obj
-                .call_method("apply", (py_observation,), None)
-                .expect("Failed to call update.apply()");
-
-            let result_state: PyState = result
-                .extract()
-                .expect("update.apply() must return <State>");
-
-            let _state = result_state.inner.read().unwrap();
-
-            // Update internal state
-            state.value = _state.value.clone();
-            state.covariance = _state.covariance.clone();
-            state.epoch = _state.epoch;
-
-        });
-
-        // return a reference counted ptr
-        self.state.inner.clone()
+        self.update.apply(observation).clone()
     }
 
     fn state(&self) -> Self::StateType {
@@ -141,14 +98,14 @@ impl Filter for PyKalmanFilter {
     fn reset(&mut self) {
         // make this call optional such that the expects dont fail shoudl the method not exists
         Python::attach(| py| {
-            let py_obj = self.update.bind(py);
+            let py_obj = self.update.model.bind(py);
             let result = py_obj
                 .call_method("reset", (), None);
 
             let _ = match result {
                 Ok(res) => res,
                 Err(_) => {
-                    spdlog::warn!("No reset() method found.");
+                    spdlog::warn!("No update.reset() method found.");
                     return;
                 }
             };
