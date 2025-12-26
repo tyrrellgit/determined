@@ -21,7 +21,7 @@ use crate::models::traits::{
 pub struct LinearTransition<const N: usize> {
     pub state: StatePtr<na::Const<N>>,    // state vector (N x 1)
     pub f: na::SMatrix<f64, N, N>,             // state transition (N x N)
-    pub q: na::SMatrix<f64, N, N>,             // process noise (N x N)
+    pub q: na::SMatrix<f64, N, N>,             // process noise covariance (N x N)
     f_inv: Option<na::SMatrix<f64, N, N>>,     // inverse of F
 }
 
@@ -103,7 +103,7 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
 #[derive(Clone, Debug)]
 pub struct LinearMeasurement<const N: usize, const M: usize> {
     pub h: na::SMatrix<f64, M, N>,             // measurement matrix
-    pub r: na::SMatrix<f64, M, M>,             // measurement noise (M x M)
+    pub r: na::SMatrix<f64, M, M>,             // measurement noise covariance(M x M)
     h_t: na::SMatrix<f64, N, M>,               // transpose of H
     h_inv: na::SMatrix<f64, N, M>,             // inverse of H
 }
