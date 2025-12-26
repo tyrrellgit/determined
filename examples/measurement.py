@@ -2,18 +2,19 @@ import numpy as np
 
 import determined as dt
 
-class DummyMeasurement:
-    def __init__(self, matrix):
-        self.matrix = matrix
-        self.m_inv = np.linalg.pinv(matrix)
-        self.jac = np.zeros((self.matrix.shape[0], self.matrix.shape[1]))
+class LinearMeasurement:
+    def __init__(self, h, r):
+        self.h = h
+        self.r = r
+        self.h_inv = np.linalg.pinv(h)
+        self.jac = np.zeros((self.h.shape[0], self.h.shape[1]))
 
     def projection(self, state: dt.State):
-        z = self.matrix @ state.value
+        z = self.h @ state.value
         return dt.Observation(z, state.epoch)
 
     def inverse(self, observation: dt.Observation):
-        x = self.m_inv @ observation.value
+        x = self.h_inv @ observation.value
         cov = np.eye(x.size)
         return dt.State(x, cov, observation.epoch)
 
@@ -29,7 +30,9 @@ h = np.array([
     [1.0, 0.0],
     [0.0, 1.0]
 ])
-model = DummyMeasurement(h)
+r = np.eye(h.shape[0])
+
+model = LinearMeasurement(h, r)
 measurement = dt.MeasurementModel(model)
 
 if __name__ == "__main__":

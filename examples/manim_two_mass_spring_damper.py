@@ -23,8 +23,11 @@ from manim import (
     BLUE, GREEN, GREY
 )
 
-# Use the Rust PyO3 wrapper for the Kalman filter
-from determined import PyKalmanFilter as PyKalman
+import determined as dt
+
+from transition import LinearTransition
+from measurement import LinearMeasurement
+from update import LinearUpdate
 
 
 def setup_two_mass_spring_damper_params():
@@ -33,6 +36,8 @@ def setup_two_mass_spring_damper_params():
     k = 0.091
     b = 0.0036
 
+    x0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+
     a = np.array([
         [0.0, 1.0, 0.0, 0.0],
         [-k / m, -b / m, k / m, b / m],
@@ -40,59 +45,65 @@ def setup_two_mass_spring_damper_params():
         [k / m_large, b / m_large, -k / m_large, -b / m_large],
     ], dtype=float)
 
-    dt = 0.1
+    # dynamics model
+    _dt = 0.1
     I = np.eye(4)
-    f = I + dt * a
+    f = I + _dt * a
 
+    sigma_q = np.diag([0.3 * _dt, 0.05 * _dt, 0.3 * _dt, 0.05 * _dt])
+    q = sigma_q @ sigma_q.T
+
+    transition_model = LinearTransition(f, q, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
+    transition = dt.TransitionModel(transition_model, dt.State(x0, np.eye(x0.size), dt.Epoch(0))) 
+    
+    # measurement model
     h = np.array([
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
     ], dtype=float)
 
-    sigma_q = np.diag([0.3 * dt, 0.05 * dt, 0.3 * dt, 0.05 * dt])
-    q = sigma_q @ sigma_q.T
     sigma_r = np.diag([0.1, 0.1])
     r = sigma_r @ sigma_r.T
 
-    x0 = np.array([-1.0, 0.0, -0.5, 0.0], dtype=float)
+    measurement_model = LinearMeasurement(h, r)
+    measurement = dt.MeasurementModel(measurement_model)
 
-    return f, h, q, r, x0, dt
+    # update model
+    update_model = LinearUpdate(transition, measurement)
+    update = dt.UpdateModel(update_model, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
+
+    # filter
+    kf = dt.KalmanFilter(update, dt.State(x0, np.eye(x0.size), dt.Epoch(0)))
+
+    # system models
+    process_noise=0.00,
+    measurement_noise=0.01
+    model = lambda x: f @ x + np.random.normal(0.0, process_noise, f.shape[0])
+    obs_model = lambda state: h @ state + np.random.normal(0.0, measurement_noise, h.shape[0])
+
+    return ( kf, model, obs_model, x0 )
 
 
-def simulate_rust(num_steps=100, process_noise=0.0, measurement_noise=0.05):
+def simulate_rust(num_steps=100):
     """Run the rust-backed Kalman filter and return trajectories.
     Returns (traj_true, traj_est) arrays of shape (num_steps, 4).
     """
-    f, h, q, r, x0, dt = setup_two_mass_spring_damper_params()
-
-    rust_filter = PyKalman(state_dim=f.shape[0], meas_dim=h.shape[0])
-    rust_filter.set_state_transition(f.flatten().tolist())
-    rust_filter.set_measurement_matrix(h.tolist())
-    rust_filter.set_process_noise(q.tolist())
-    rust_filter.set_measurement_noise(r.tolist())
-    rust_filter.set_state(x0.tolist())
-    rust_filter.set_covariance(2.0)
-
-    x_true = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
+    kf, model, h, x_true = setup_two_mass_spring_damper_params()
 
     traj_true = np.zeros((num_steps, 4))
     traj_est = np.zeros((num_steps, 4))
 
-    proc_noise = np.zeros(f.shape[0])
-    meas_noise = np.zeros(h.shape[0])
-
     for step in range(num_steps):
-        rust_filter.predict()
-        if process_noise > 0.0:
-            proc_noise = np.random.normal(0.0, measurement_noise, f.shape[0])
-        if measurement_noise > 0.0:
-            meas_noise = np.random.normal(0.0, measurement_noise, h.shape[0])
-        x_true = f @ x_true + proc_noise
-        z = (h @ x_true + meas_noise).tolist()
-        state_vec = np.array(rust_filter.update(z))
+        kf.predict(dt.Epoch(step))
+
+        x_true = model(x_true) # true system dynamics + process noise
+        z = h(x_true) # measurement + measurement noise
+
+        _z = dt.Observation(z, dt.Epoch(step))
+        state_vec = kf.update(_z)
 
         traj_true[step] = x_true
-        traj_est[step] = state_vec
+        traj_est[step] = state_vec.value
 
     return traj_true, traj_est
 
@@ -167,9 +178,7 @@ class TwoMassSpringDamperScene(Scene):
         num_steps = 400
         run_time = 20.0  # seconds
         traj_true, traj_est = simulate_rust(
-            num_steps=num_steps, 
-            process_noise=0.05,
-            measurement_noise=0.01)
+            num_steps=num_steps)
 
         scale = 1.0
         offset_y_true = 1.0  # True system at y=1
