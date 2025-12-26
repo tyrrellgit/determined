@@ -77,6 +77,11 @@ impl PyMeasurementModel {
         PyMeasurementModel { py_obj: model }
     }
 
+    #[getter]
+    fn get_model(&self) -> &Py<PyAny> {
+        &self.py_obj
+    }
+
     #[pyo3(name="projection")]
     pub fn project_state(&mut self, state: &PyState) -> PyObservation {
         let state_data = state.inner.read().unwrap();

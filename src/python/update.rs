@@ -33,6 +33,11 @@ impl PyUpdateModel {
         }
     }
 
+    #[getter]
+    fn get_model(&self) -> &Py<PyAny> {
+        &self.py_obj
+    }
+
     #[pyo3(name="state")]
     fn state_transition(&mut self, epoch: &PyEpoch) -> PyState {
         let state = self.state(&epoch.inner);
