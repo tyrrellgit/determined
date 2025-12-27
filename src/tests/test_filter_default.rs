@@ -24,8 +24,8 @@ fn test_kalman_update_scalar() {
         epoch: Epoch::new(0),
     };
 
-    // predict (block pattern to avoid borrow conflict)
-    { let _ = filter.predict(&Epoch::new(1)); }
+    // predict 
+    let _ = filter.predict(&Epoch::new(1));
 
     // measurement update
     let _ = filter.update(&obs);

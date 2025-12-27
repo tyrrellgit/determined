@@ -84,7 +84,6 @@ fn setup_two_mass_spring_damper_filter() -> (
 
     // build algorithm update model
     let update = LinearUpdate::<4, 2>::new(
-        x.clone(),
         measurement,
         transition
     );
@@ -92,7 +91,6 @@ fn setup_two_mass_spring_damper_filter() -> (
     // build kalman filter with give update model
     let kf =
         KalmanFilterNM::new(
-            x,
             update,
         );
 
