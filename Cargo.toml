@@ -1,0 +1,22 @@
+[package]
+name = "determined"
+version = "0.1.0"
+edition = "2024"
+readme = "README.md"
+
+[dependencies]
+spdlog-rs = "0.4"
+pyo3 = { version = "0.27.2", features = ["extension-module"] }
+numpy = "0.27.1"
+ndarray = "0.17.1"
+nalgebra = "0.33.2"
+statrs = { version = "0.18.0", features = [ "rand" ] }
+rand = "0.8.5"
+rand_distr = "0.4.3"
+
+[lib]
+name = "determined"
+crate-type = ["lib", "cdylib"]
+
+[profile.release]
+debug = true
