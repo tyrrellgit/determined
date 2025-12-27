@@ -25,7 +25,7 @@ The main modules are:
 
 Check out examples for `python` bindings and the core `rust` library in `/examples`.  To run `rust` examples use `cargo`:
 ```bash
-cargo run --example < example_name >
+cargo run --example example_name
 ```
 
 To run the visualisation example using `python` and `manim` use:
