@@ -11,7 +11,8 @@ use crate::measurement::Observation;
 use crate::epoch::Epoch;
 use crate::filter::Filter;
 use crate::models::{
-    UpdateModel, LinearUpdate,
+    UpdateModel,
+    LinearUpdate, NonLinearUpdate,
     DefaultFromState
 };
 
@@ -26,11 +27,28 @@ where
     pub update: T,
 }
 
-/// Implementation for constructors
-impl<const N: usize, const M: usize, T> KalmanFilterT<N, M, T>
+/// Impementation for Defaults
+impl<const N: usize, const M: usize, T> DefaultFromState for KalmanFilterT<N, M, T>
 where
     T: UpdateModel<na::Const<N>, na::Const<M>>
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
+{   
+    type DefaultType = Self;
+    type StateType = StatePtr<na::Const<N>>;
+    
+    fn default_from_state(state: Self::StateType) -> Self::DefaultType {
+        KalmanFilterT {
+            state: state.clone(),
+            update: T::default_from_state(state),
+        }
+    }
+
+}
+
+/// Implementation for constructors
+impl<const N: usize, const M: usize, T> KalmanFilterT<N, M, T>
+where
+    T: UpdateModel<na::Const<N>, na::Const<M>>,
 {
     pub fn new(
         mut update: T,
@@ -39,13 +57,6 @@ where
         KalmanFilterT {
             state: state.clone(),
             update,
-        }
-    }
-
-    pub fn default_from_state(state: StatePtr<na::Const<N>>) -> Self {
-        KalmanFilterT {
-            state: state.clone(),
-            update: T::default_from_state(state),
         }
     }
 }
@@ -82,4 +93,11 @@ pub type KalmanFilterNM<const N: usize, const M: usize> =
     KalmanFilterT<
         N, M, 
         LinearUpdate<N, M>
+    >;
+
+/// Extended Kalman Filter
+pub type ExtendedKalmanFilterNM<const N: usize, const M: usize> =
+    KalmanFilterT<
+        N, M,
+        NonLinearUpdate<N, M>
     >;

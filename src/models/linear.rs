@@ -1,7 +1,7 @@
-//! Model traits used by the Extended Kalman Filter implementation.
+//! Model traits used by the Kalman Filter implementation.
 //!
-//! These traits allow users to supply nonlinear state transition and
-//! measurement models with accompanying Jacobians so the EKF can operate.
+//! These traits allow users to supply linear state transition and
+//! measurement matrices defining a standard Kalman Filter Implementation.
 //! 
 
 use crate::common::na as na;
@@ -93,6 +93,7 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
         &self.state
     }
 
+    // TODO: update to proper jacobian
     fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, N, N> {
         self.f
     }
@@ -223,13 +224,14 @@ impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for
         let h_t = &self.measurement.h_t;
         let s = h * cov * h_t + self.measurement.r;
         let s_inv = match s.try_inverse(){
-            None => {
+            Some(s_inv) => s_inv,
+            _ => {
                 spdlog::error!(
                     "Invalid update: Innovation covariance S is singular; state will not be updated."
                 );
                 return &self.state;
-            }
-            Some(s_inv) => s_inv,
+            },
+
         };
         
         // Compute gain and innovation
@@ -246,6 +248,7 @@ impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for
 
     }
 
+    // code proper jacobian
     fn jacobian(&self, _x: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
         self.measurement.h
     }
