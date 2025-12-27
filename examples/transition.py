@@ -27,12 +27,11 @@ cov = np.eye(value.size)
 
 epoch = dt.Epoch(0)
 state = dt.State(value, cov, epoch)
-initial_state = dt.State(value, cov, epoch)
 
 f = np.diag(np.array([1.5, 2.0]))
 q = np.eye(f.shape[0])
 
-model = LinearTransition(f, q, initial_state)
+model = LinearTransition(f, q, state)
 transition = dt.TransitionModel(model, state)
 
 if __name__ == "__main__":
