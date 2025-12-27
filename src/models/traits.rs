@@ -63,8 +63,8 @@ where
         + na::allocator::Allocator<M, M>
         + na::allocator::Allocator<M, N> 
 {   
-    /// State transition model
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<N>;
+    /// State accessor
+    fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N>;
 
     /// Compute updated gains
     fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N>;

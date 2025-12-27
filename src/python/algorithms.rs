@@ -83,7 +83,7 @@ impl Filter for PyKalmanFilter {
 
     fn predict(&mut self, epoch: &Epoch) -> Self::StateType {
         // return a reference counted ptr
-        self.update.state(epoch).clone()
+        self.update.state(Some(epoch)).clone()
     }
 
     fn update(&mut self, observation: &Observation<na::Dyn>) -> Self::StateType {

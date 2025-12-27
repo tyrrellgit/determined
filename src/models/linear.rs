@@ -171,12 +171,12 @@ pub struct LinearUpdate<const N: usize, const M: usize > {
 
 impl<const N: usize, const M: usize> LinearUpdate<N, M> {
     pub fn new(
-        state: StatePtr<na::Const<N>>,
         measurement: LinearMeasurement<N, M>,
         transition: LinearTransition<N>,
     ) -> Self {
+        let _state = transition.state.clone();
         LinearUpdate {
-            state,
+            state: _state,
             measurement,
             transition,
             identity: na::SMatrix::<f64, N, N>::identity(),
@@ -191,7 +191,6 @@ impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
 
     fn default_from_state(state: Self::StateType) -> Self::DefaultType {
         LinearUpdate::new(
-            state.clone(),
             LinearMeasurement::<N, M>::default(),
             LinearTransition::<N>::default_from_state(state)
         )
@@ -200,8 +199,11 @@ impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
 
 impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for LinearUpdate<N, M> {
 
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
-        self.transition.state(epoch)
+    fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<na::Const<N>> {
+        match epoch {
+            Some(epoch) => self.transition.state(epoch),
+            _ => &self.transition.state
+        }
     }
     
     fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>> {

@@ -33,11 +33,11 @@ where
         + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
 {
     pub fn new(
-        state: StatePtr<na::Const<N>>,
-        update: T,
+        mut update: T,
     ) -> Self {
+        let state = update.state(None);
         KalmanFilterT {
-            state,
+            state: state.clone(),
             update,
         }
     }
@@ -59,7 +59,7 @@ where
     type ObservationType = Observation<na::Const<M>>;
 
     fn predict(&mut self, _epoch: &Epoch) -> Self::StateType {
-        self.update.state(_epoch).clone()
+        self.update.state(Some(_epoch)).clone()
     }
 
     fn update(&mut self, observation: &Self::ObservationType) -> Self::StateType {

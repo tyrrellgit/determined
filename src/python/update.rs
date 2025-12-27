@@ -8,6 +8,7 @@ use crate::common::na;
 use crate::measurement::Observation;
 use crate::models::{TransitionModel, UpdateModel};
 use crate::state::{ State, StatePtr };
+use crate::epoch::Epoch;
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
@@ -67,7 +68,7 @@ impl PyUpdateModel {
 
     #[pyo3(name="state")]
     fn state_transition(&mut self, epoch: &PyEpoch) -> PyState {
-        let state = self.state(&epoch.inner);
+        let state = self.state(Some(&epoch.inner));
         PyState { inner: state.clone() }
     }
 
@@ -91,8 +92,11 @@ impl PyUpdateModel {
 
 impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
 
-    fn state(&mut self, epoch: &crate::epoch::Epoch) -> &StatePtr<na::Dyn> {
-        self.transition.state(epoch)
+    fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<na::Dyn> {
+        match epoch {
+            Some(epoch) => self.transition.state(epoch),
+            _ => &self.transition.state.inner
+        }
     }
 
     fn apply(&mut self, observation: &Observation<na::Dyn>) -> &StatePtr<na::Dyn> {
