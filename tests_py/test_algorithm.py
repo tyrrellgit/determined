@@ -49,7 +49,14 @@ class TestAlgorithm(unittest.TestCase):
     def test_predict(self):
         _e = dt.Epoch(1)
         _state = self.algorithm.predict(_e)
+
+        # one step update should ALWAYS be the result --> according to harness model
         np.testing.assert_array_equal(_state.value, self.one_step_state)
+
+        # check the original state object has also been updated
+        np.testing.assert_array_equal(_state.value, self.state.value)
+        np.testing.assert_array_equal(_state.covariance, self.state.covariance)
+        np.testing.assert_equal(_state.epoch.value, self.state.epoch.value)
 
     def test_apply(self):
         new_state = self.algorithm.update(self.obs)
