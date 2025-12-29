@@ -19,6 +19,9 @@ use crate::models::LinearMeasurement;
 type F<const N: usize> = Box<dyn FnMut(&Epoch) -> na::SMatrix<f64, N, 1>>;
 type J<const N: usize> = Box<dyn Fn(&State<na::Const<N>>) -> na::SMatrix<f64, N, N>>;
 
+type H<const N: usize, const M: usize> = Box<dyn Fn(&State<na::Const<N>>) -> na::SMatrix<f64, M, 1>>;
+type JH<const N: usize, const M: usize> = Box<dyn Fn(&State<na::Const<N>>) -> na::SMatrix<f64, M, N>>;
+
 
 // Transition Models
 // NonLinear (Discrete Time)
@@ -68,11 +71,39 @@ impl<const N: usize> TransitionModel<na::Const<N>> for NonLinearTransition<N> {
     }
 }
 
-// Measurement
+// Measurement -- TODO: finish this
 pub struct NonLinearMeasurement<const N: usize, const M: usize> {
-    pub h: F<N>,
-    pub j: J<N>,
+    pub h: H<N, M>,
+    pub j: JH<N, M>,
     pub r: na::SMatrix<f64, N, N>,
+}
+
+impl<const N: usize, const M: usize> NonLinearMeasurement<N, M> {   
+    pub fn new(
+        h: H<N, M>,
+        j: JH<N, M>,
+        r: na::SMatrix<f64, N, N>
+    ) -> Self {
+        NonLinearMeasurement{ h, j, r }
+    }
+} 
+
+impl<const N: usize, const M: usize> MeasurementModel<na::Const<N>, na::Const<M>> for NonLinearMeasurement<N, M> {
+    fn projection(&self, state: &State<na::Const<N>>) -> Observation<na::Const<M>> {
+        let _value = (self.h)(state);
+        Observation {
+            value: _value,
+            epoch: state.epoch
+        }
+    }
+
+    fn inverse(&self, _obs: &Observation<na::Const<M>>) -> State<na::Const<N>> {
+        todo!()
+    } // TODO: probably dont need this since its could often be ill-defined
+
+    fn jacobian(&self, state: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
+        (self.j)(state) // TODO: code proper jacobian
+    }
 }
 
 // Update
