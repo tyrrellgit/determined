@@ -1,5 +1,5 @@
 use crate::measurement::Observation;
-use crate::state::{State, StatePtr};
+use crate::state::State;
 use crate::filter::Filter;
 use crate::algorithms::ExtendedKalmanFilterNM;
 use crate::models::*;
