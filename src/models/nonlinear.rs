@@ -68,6 +68,8 @@ impl<const N: usize> TransitionModel<na::Const<N>> for NonLinearTransition<N> {
     }
 }
 
+/// TODO: add NonLinearMeasurement
+
 pub struct NonLinearUpdate<const N: usize, const M: usize> {
     pub state: StatePtr<na::Const<N>>,               // mutable ref. to state
     pub measurement: LinearMeasurement<N, M>,        // measurement model
