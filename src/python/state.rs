@@ -2,12 +2,12 @@
 
 use pyo3::prelude::*;
 use numpy::{ PyReadonlyArray1, PyReadonlyArray2 };
-use numpy::{ ToPyArray, PyArrayMethods };
+use numpy::ToPyArray;
 
 use crate::common::na as na;
 use crate::python::epoch::PyEpoch;
 use crate::state::{State, StatePtr};
-use crate::python::arrays::{ PyVector, PyMatrix };
+use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix };
 
 
 #[pyclass(name="State")]
@@ -35,15 +35,8 @@ impl PyState {
     
     // Same for covariance
     let cov = covariance.map(|cov| {
-        let nd_cov = cov.as_array();
-        let (nrows, ncols) = nd_cov.dim();
-        
-        // ndarray -> nalgebra (single copy, row-major)
-        na::DMatrix::<f64>::from_iterator(
-            nrows,
-            ncols,
-            nd_cov.iter().copied()
-        )
+        // ndarray -> nalgebra (single copy)
+        to_dmatrix(cov.as_array())
     });
         
         Ok(PyState {
@@ -71,11 +64,7 @@ impl PyState {
     #[getter]
     fn covariance<'py>(&self, py: Python<'py>) -> Option<PyMatrix<'py>> {
         let state = self.inner.read().unwrap();
-        state.covariance.as_ref().map(|cov| {
-            cov.as_slice().to_pyarray(py)
-                .reshape([cov.nrows(), cov.ncols()])
-                .unwrap()
-        })
+        state.covariance.as_ref().map(|cov| to_pymatrix(py, cov))
     }
 
     fn __repr__(&self) -> PyResult<String> {

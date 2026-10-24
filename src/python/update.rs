@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use numpy::{ ToPyArray, PyArrayMethods };
+use numpy::PyArrayMethods;
 
 use crate::common::na;
 use crate::measurement::Observation;
@@ -14,7 +14,7 @@ use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
 use crate::python::transition::PyTransitionModel;
 use crate::python::measurement::{PyMeasurementModel, PyObservation};
-use crate::python::arrays::{ PyMatrix };
+use crate::python::arrays::{ PyMatrix, to_dmatrix, to_pymatrix };
 
 
 #[pyclass(name="UpdateModel")]
@@ -83,10 +83,7 @@ impl PyUpdateModel {
     fn jacobian_matrix<'py>(&mut self, py: Python<'py>, state: &'py PyState) -> PyMatrix<'py> {
         let state_data = state.inner.read().unwrap();
         let jac = self.jacobian(&state_data);
-        jac.as_slice()
-            .to_pyarray(py)
-            .reshape([jac.nrows(), jac.ncols()])
-            .unwrap()
+        to_pymatrix(py, &jac)
     }
 }
 
@@ -147,16 +144,8 @@ impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
                 .extract()
                 .expect("jacobian() must return ndarray");
             
-            // numpy -> ndarray (zero copy view)
-            let array = unsafe { result_vec.as_array() };
-            let (nrows, ncols) = array.dim();
-        
-            // ndarray -> nalgebra (single copy, row-major)
-            na::DMatrix::<f64>::from_iterator(
-                nrows,
-                ncols,
-                array.iter().copied()
-            )
+            // numpy -> ndarray (zero copy view) -> nalgebra (single copy)
+            to_dmatrix(unsafe { result_vec.as_array() })
         })
     }
 }

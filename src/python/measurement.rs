@@ -12,7 +12,7 @@ use crate::state::State;
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
-use crate::python::arrays::{ PyVector, PyMatrix };
+use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix };
 
 
 #[pyclass(name="Observation")]
@@ -108,10 +108,7 @@ impl PyMeasurementModel {
     pub fn jacobian_matrix<'py>(&mut self, py: Python<'py>, state: &PyState) -> PyMatrix<'py> {
         let state_data = state.inner.read().unwrap();
         let jac = self.jacobian(&state_data);
-        jac.as_slice()
-            .to_pyarray(py)
-            .reshape([jac.nrows(), jac.ncols()])
-            .unwrap()
+        to_pymatrix(py, &jac)
     }
 }
 
@@ -182,16 +179,8 @@ impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
                 .extract()
                 .expect("jacobian() must return <ndarray>");
 
-            // numpy -> ndarray (zero copy view)
-            let array = unsafe { result_vec.as_array() };
-            let (nrows, ncols) = array.dim();
-        
-            // ndarray -> nalgebra (single copy, row-major)
-            na::DMatrix::<f64>::from_iterator(
-                nrows,
-                ncols,
-                array.iter().copied()
-            )
+            // numpy -> ndarray (zero copy view) -> nalgebra (single copy)
+            to_dmatrix(unsafe { result_vec.as_array() })
         })
     }
 }
