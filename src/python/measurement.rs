@@ -1,18 +1,14 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
 use numpy::{ PyReadonlyArray1 };
-use numpy::{ ToPyArray ,PyArrayMethods };
+use numpy::ToPyArray;
 
 use crate::common::na as na;
 use crate::measurement::Observation;
-use crate::models::MeasurementModel;
-use crate::state::State;
 
 use crate::python::epoch::PyEpoch;
-use crate::python::state::PyState;
-use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix };
+use crate::python::arrays::PyVector;
 
 
 #[pyclass(name="Observation")]
@@ -59,129 +55,5 @@ impl PyObservation {
 
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:0.6}", self.inner))
-    }
-}
-
-// Wrapper for Python-defined Measurement models
-#[pyclass(name="MeasurementModel")]
-pub struct PyMeasurementModel {
-    pub model: Py<PyAny>,
-}
-
-impl Clone for PyMeasurementModel {
-    fn clone(&self) -> Self {
-        Python::attach(| py| {
-            let _ref = self.model.clone_ref(py);
-            Self {
-                model: _ref,
-            }
-        })
-    }
-}
-
-#[pymethods]
-impl PyMeasurementModel {
-    
-    #[new]
-    pub fn new(model: Py<PyAny>) -> Self {
-        PyMeasurementModel { model: model }
-    }
-
-    #[getter]
-    fn get_model(&self) -> &Py<PyAny> {
-        &self.model
-    }
-
-    #[pyo3(name="projection")]
-    pub fn project_state(&mut self, state: &PyState) -> PyObservation {
-        let state_data = state.inner.read().unwrap();
-        let proj = self.projection(&state_data);
-        PyObservation { inner: proj }
-    }
-
-    #[pyo3(name="inverse")]
-    pub fn project_observation(&mut self, observation: PyObservation) -> PyState {
-        let proj = self.inverse(&observation.inner);
-        PyState { inner: proj.ptr() }
-    }
-
-    #[pyo3(name="jacobian")]
-    pub fn jacobian_matrix<'py>(&mut self, py: Python<'py>, state: &PyState) -> PyMatrix<'py> {
-        let state_data = state.inner.read().unwrap();
-        let jac = self.jacobian(&state_data);
-        to_pymatrix(py, &jac)
-    }
-}
-
-impl MeasurementModel<na::Dyn, na::Dyn> for PyMeasurementModel {
-    fn projection(&self, state: &State<na::Dyn>) -> Observation<na::Dyn> {
-        let py_state = PyState { inner: state.ptr() };
-
-        Python::attach(|py| {
-            let py_obj = self.model.bind(py);
-            
-            let result = py_obj
-                .call_method(
-                    "projection",
-                    (py_state,),
-                    None
-                )
-                .expect("Failed to call projection()");
-
-            let obs: PyObservation = result
-                .extract()
-                .expect("projection() must return <Observation>");
-
-            obs.inner
-        })
-    }
-
-    fn inverse(&self, obs: &Observation<na::Dyn>) -> State<na::Dyn> {
-
-        let py_obs = PyObservation {
-                inner: Observation {
-                    value: obs.value.clone(),
-                    epoch: obs.epoch,
-                }
-            };
-
-        Python::attach(|py| {
-            let py_obj = self.model.bind(py);
-
-            let result = py_obj
-                .call_method(
-                    "inverse",
-                    (py_obs,),
-                    None
-                )
-                .expect("Failed to call inverse()");
-
-            let state: PyState = result
-                .extract()
-                .expect("inverse() must return <State>");
-
-            state.inner.read().unwrap().clone()
-        })
-    }
-
-    fn jacobian(&self, state: &State<na::Dyn>) -> na::OMatrix<f64, na::Dyn, na::Dyn> {
-        let py_state = PyState{ inner: state.ptr() };
-        
-        Python::attach(|py| {
-            let py_obj = self.model.bind(py);            
-            let result = py_obj
-                .call_method(
-                    "jacobian",
-                    (py_state,),
-                    None)
-                .expect("Failed to call jacobian()");
-            
-            let result_vec: PyMatrix<'_> = result
-                .extract()
-                .expect("jacobian() must return <ndarray>");
-
-            // numpy -> ndarray (zero copy view) -> nalgebra (single copy)
-            to_dmatrix(unsafe { result_vec.as_array() })
-        })
     }
 }
