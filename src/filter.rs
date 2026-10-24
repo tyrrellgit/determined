@@ -9,7 +9,6 @@ use crate::epoch::Epoch;
 /// `predict`/`update` to avoid unnecessary cloning of large state vectors.
 ///
 /// Minimal contract:
-/// - `new()` constructs a reasonable default instance.
 /// - `predict(epoch)` advances internal state (e.g. x, P) and returns a
 ///   reference to the predicted state.
 /// - `update(obs)` fuses an observation into the internal state and returns
