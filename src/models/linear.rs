@@ -74,11 +74,10 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
             return &self.state;
         }
 
-        let cov =  &state.covariance();
-
         if delta > 0 {
             // propagate forward
             for _ in 0..delta {
+                let cov = state.covariance();
                 state.value = self.f * state.value;
                 state.covariance = Some(self.f * cov * self.f.transpose() + self.q);
             }
@@ -86,10 +85,12 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
             // propagate backward
             let f_inv = self.f_inv();
             for _ in 0..delta.abs() {
+                let cov = state.covariance();
                 state.value = f_inv * state.value;
                 state.covariance = Some(f_inv * (cov - self.q) * f_inv.transpose());
             }
         };
+        state.epoch = *epoch;
         &self.state
     }
 
