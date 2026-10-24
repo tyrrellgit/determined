@@ -4,7 +4,8 @@
 //!
 //! - `epoch`, `state`, `measurement`: `Epoch`, `State`, `Observation`
 //! - `models`: Python-implemented `TransitionModel`, `MeasurementModel`, `UpdateModel`
-//! - `algorithms`: `KalmanFilter`, `ExtendedKalmanFilter`, `UnscentedKalmanFilter`, `CustomFilter`
+//! - `algorithms`: `KalmanFilter`, `ExtendedKalmanFilter`, `UnscentedKalmanFilter`,
+//!   `UDKalmanFilter`, `UDExtendedKalmanFilter`, `CustomFilter`
 //!
 //! plus binding helpers: `arrays` (numpy <-> nalgebra), `callbacks` (Python
 //! functions as Rust model closures, for the EKF and UKF) and `logging` (spdlog -> Python logging).
@@ -40,6 +41,8 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<algorithms::PyKalmanFilter>()?;
     m.add_class::<algorithms::PyExtendedKalmanFilter>()?;
     m.add_class::<algorithms::PyUnscentedKalmanFilter>()?;
+    m.add_class::<algorithms::PyUDKalmanFilter>()?;
+    m.add_class::<algorithms::PyUDExtendedKalmanFilter>()?;
     m.add_class::<algorithms::PyCustomFilter>()?;
 
     Ok(())

@@ -20,3 +20,41 @@ where
     let aat_inv = (a * &a_t).try_inverse()?;
     Some(a_t * aat_inv)
 }
+
+/// UD decomposition `M = U D U^T` of a symmetric positive semi-definite
+/// matrix, with `U` unit upper triangular and `D` diagonal (returned as a
+/// vector). Ramos et al., "A summary on the UD Kalman Filter" (arXiv:2203.06105),
+/// Appendix A.
+///
+/// A zero pivot (a semi-definite `M`) gives zero off-diagonal entries in that
+/// column of `U`. A negative entry in `D` means `M` was not positive
+/// semi-definite.
+pub fn udu_decomposition<D>(m: &na::OMatrix<f64, D, D>) -> (na::OMatrix<f64, D, D>, na::OVector<f64, D>)
+where
+    D: na::Dim,
+    na::DefaultAllocator: Allocator<D, D> + Allocator<D>,
+{
+    let (nd, _) = m.shape_generic();
+    let n = m.nrows();
+    let mut u = na::OMatrix::<f64, D, D>::identity_generic(nd, nd);
+    let mut d = na::OVector::<f64, D>::zeros_generic(nd, na::Const::<1>);
+
+    // pivots below this are treated as zero
+    let scale = m.diagonal().iter().fold(0.0f64, |acc, x| acc.max(x.abs()));
+    let tiny = f64::EPSILON * scale.max(f64::MIN_POSITIVE);
+
+    for j in (0..n).rev() {
+        for i in (0..=j).rev() {
+            let mut sigma = m[(i, j)];
+            for k in j + 1..n {
+                sigma -= u[(i, k)] * d[k] * u[(j, k)];
+            }
+            if i == j {
+                d[j] = sigma;
+            } else if d[j].abs() > tiny {
+                u[(i, j)] = sigma / d[j];
+            }
+        }
+    }
+    (u, d)
+}

@@ -1,6 +1,7 @@
 pub mod linear;
 pub mod nonlinear;
 pub mod traits;
+pub mod ud;
 pub mod unscented;
 pub mod update;
 
@@ -19,4 +20,9 @@ pub use unscented::{
     UnscentedParams,
     UnscentedTransition, UnscentedMeasurement, UnscentedUpdate,
     UnscentedTransitionN, UnscentedMeasurementNM, UnscentedUpdateNM,
+};
+pub use ud::{
+    UDFactors,
+    LinearUDUpdate, NonLinearUDUpdate,
+    LinearUDUpdateNM, NonLinearUDUpdateNM,
 };

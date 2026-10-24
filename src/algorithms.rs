@@ -16,6 +16,7 @@ use crate::filter::Filter;
 use crate::models::{
     UpdateModel,
     LinearUpdate, NonLinearUpdate, UnscentedUpdate,
+    LinearUDUpdate, NonLinearUDUpdate,
     DefaultFromState
 };
 
@@ -139,3 +140,25 @@ pub type UnscentedKalmanFilterNM<const N: usize, const M: usize> =
 /// Unscented Kalman Filter with runtime sized state and measurement
 pub type UnscentedKalmanFilterDyn =
     KalmanFilterT<na::Dyn, na::Dyn, UnscentedUpdate<na::Dyn, na::Dyn>>;
+
+/// UD factorised Kalman Filter
+pub type UDKalmanFilterNM<const N: usize, const M: usize> =
+    KalmanFilterT<
+        na::Const<N>, na::Const<M>,
+        LinearUDUpdate<na::Const<N>, na::Const<M>>
+    >;
+
+/// UD factorised Kalman Filter with runtime sized state and measurement
+pub type UDKalmanFilterDyn =
+    KalmanFilterT<na::Dyn, na::Dyn, LinearUDUpdate<na::Dyn, na::Dyn>>;
+
+/// UD factorised Extended Kalman Filter
+pub type UDExtendedKalmanFilterNM<const N: usize, const M: usize> =
+    KalmanFilterT<
+        na::Const<N>, na::Const<M>,
+        NonLinearUDUpdate<na::Const<N>, na::Const<M>>
+    >;
+
+/// UD factorised Extended Kalman Filter with runtime sized state and measurement
+pub type UDExtendedKalmanFilterDyn =
+    KalmanFilterT<na::Dyn, na::Dyn, NonLinearUDUpdate<na::Dyn, na::Dyn>>;
