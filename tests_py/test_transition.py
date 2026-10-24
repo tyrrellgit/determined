@@ -14,7 +14,7 @@ class TestTransisionModel(unittest.TestCase):
         cls.cov = np.eye(cls.value.size)
 
         cls.epoch = dt.Epoch(0)
-        cls.state = dt.State(cls.value, cls.cov, cls.epoch)
+        cls.state = dt.State(cls.value, covariance=cls.cov, epoch=cls.epoch)
 
         f = np.diag(np.array([2.0, 1.5]))
         q = np.eye(f.shape[0])
@@ -25,7 +25,7 @@ class TestTransisionModel(unittest.TestCase):
         return super().setUpClass()
     
     def setUp(self):
-        self.transition = dt.TransitionModel(self.model, self.state)
+        self.transition = dt.TransitionModel(self.model, state=self.state)
         return super().setUp()
     
     def test_transition(self):

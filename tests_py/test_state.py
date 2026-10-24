@@ -14,6 +14,6 @@ class TestState(unittest.TestCase):
         ])
 
         epoch = dt.Epoch(0)
-        state = dt.State(value, cov, epoch)
+        state = dt.State(value, covariance=cov, epoch=epoch)
         
         np.testing.assert_array_equal(value, state.value, "state value arrays not equal")

@@ -35,7 +35,7 @@ class LinearUpdate:
         value = _state.value + k @ y
         cov = (np.eye(value.size) - k @ h) @ _cov
 
-        return dt.State(value, cov, epoch)
+        return dt.State(value, covariance=cov, epoch=epoch)
 
     def jacobian(self, state: dt.State):
         jac = self.t.jacobian(state)
@@ -44,12 +44,12 @@ class LinearUpdate:
 value = np.array([1.0, 0.0])
 epoch = dt.Epoch(0)
 
-state = dt.State(value, np.eye(value.size), epoch)
-obs = dt.Observation(np.array([0.0, 1.0]), epoch)
+state = dt.State(value, covariance=np.eye(value.size), epoch=epoch)
+obs = dt.Observation(np.array([0.0, 1.0]), epoch=epoch)
 
 model = LinearUpdate(transition, measurement)
 
-update = dt.UpdateModel(model, transition, measurement)
+update = dt.UpdateModel(model, transition=transition, measurement=measurement)
 
 
 if __name__ == "__main__":

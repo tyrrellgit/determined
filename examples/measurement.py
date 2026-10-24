@@ -11,12 +11,12 @@ class LinearMeasurement:
 
     def projection(self, state: dt.State):
         z = self.h @ state.value
-        return dt.Observation(z, state.epoch)
+        return dt.Observation(z, epoch=state.epoch)
 
     def inverse(self, observation: dt.Observation):
         x = self.h_inv @ observation.value
         cov = np.eye(x.size)
-        return dt.State(x, cov, observation.epoch)
+        return dt.State(x, covariance=cov, epoch=observation.epoch)
 
     def jacobian(self, state: dt.State):
         return self.jac
@@ -24,7 +24,7 @@ class LinearMeasurement:
 
 value = np.array([1.0, 0.0])
 epoch = dt.Epoch(0)
-state = dt.State(value, np.eye(value.size), epoch)
+state = dt.State(value, covariance=np.eye(value.size), epoch=epoch)
 
 h = np.array([
     [1.0, 0.0],

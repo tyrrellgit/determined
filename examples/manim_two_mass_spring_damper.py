@@ -37,7 +37,7 @@ def setup_two_mass_spring_damper_params():
     b = 0.0036
 
     x0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)
-    initial_state =  dt.State(x0, np.eye(x0.size), dt.Epoch(0))
+    initial_state =  dt.State(x0, covariance=np.eye(x0.size), epoch=dt.Epoch(0))
 
     a = np.array([
         [0.0, 1.0, 0.0, 0.0],
@@ -55,7 +55,7 @@ def setup_two_mass_spring_damper_params():
     q = sigma_q @ sigma_q.T
 
     transition_model = LinearTransition(f, q, initial_state)
-    transition = dt.TransitionModel(transition_model, initial_state) 
+    transition = dt.TransitionModel(transition_model, state=initial_state) 
     
     # measurement model
     h = np.array([
@@ -71,7 +71,7 @@ def setup_two_mass_spring_damper_params():
 
     # update model
     update_model = LinearUpdate(transition, measurement)
-    update = dt.UpdateModel(update_model, transition, measurement)
+    update = dt.UpdateModel(update_model, transition=transition, measurement=measurement)
 
     # filter
     kf = dt.KalmanFilter(update)
@@ -100,7 +100,7 @@ def simulate_rust(num_steps=100):
         x_true = model(x_true) # true system dynamics + process noise
         z = h(x_true) # measurement + measurement noise
 
-        _z = dt.Observation(z, dt.Epoch(step))
+        _z = dt.Observation(z, epoch=dt.Epoch(step))
         state_vec = kf.update(_z)
 
         traj_true[step] = x_true

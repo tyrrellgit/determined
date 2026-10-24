@@ -8,7 +8,7 @@ import numpy as np
 import determined as dt
 
 # initial guess (2, 2) with a wide covariance; the target is really at (3, 4)
-state = dt.State(np.array([2.0, 2.0]), np.eye(2) * 4.0, dt.Epoch(0))
+state = dt.State(np.array([2.0, 2.0]), covariance=np.eye(2) * 4.0, epoch=dt.Epoch(0))
 
 
 def f(x):
@@ -35,5 +35,5 @@ ekf = dt.ExtendedKalmanFilter(
 
 for t in range(1, 6):
     ekf.predict(dt.Epoch(t))
-    estimate = ekf.update(dt.Observation(np.array([5.0]), dt.Epoch(t)))
+    estimate = ekf.update(dt.Observation(np.array([5.0]), epoch=dt.Epoch(t)))
     print(f"t={t} x={estimate.value} range={np.linalg.norm(estimate.value):.4f}")

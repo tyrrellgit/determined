@@ -20,6 +20,7 @@ pub struct PyState {
 impl PyState {
     
     #[new]
+    #[pyo3(signature = (value, *, covariance, epoch))]
     fn new(
         value: PyReadonlyArray1<f64>,
         covariance: Option<PyReadonlyArray2<f64>>,

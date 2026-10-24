@@ -16,7 +16,7 @@ class TestAlgorithm(unittest.TestCase):
         cls.value = np.array([1.0, 1.0])
         cls.cov = np.eye(cls.value.size)
         cls.epoch = dt.Epoch(0)
-        cls.obs = dt.Observation(np.array([0.0, 1.0]), cls.epoch)
+        cls.obs = dt.Observation(np.array([0.0, 1.0]), epoch=cls.epoch)
 
         cls.f = np.diag(np.array([2.0, 1.5]))
         cls.q = np.eye(cls.f.shape[0])
@@ -31,16 +31,16 @@ class TestAlgorithm(unittest.TestCase):
     
     # Rebuild models at each test to avoid persistent state
     def setUp(self):
-        self.state = dt.State(self.value, self.cov, self.epoch)
+        self.state = dt.State(self.value, covariance=self.cov, epoch=self.epoch)
 
         self.t = LinearTransition(self.f, self.q, self.state)
-        self.transition = dt.TransitionModel(self.t, self.state)
+        self.transition = dt.TransitionModel(self.t, state=self.state)
 
         self.m = LinearMeasurement(self.h, self.r)
         self.measurement = dt.MeasurementModel(self.m)
 
         self.u = LinearUpdate(self.transition, self.measurement)
-        self.update = dt.UpdateModel(self.u, self.transition, self.measurement)
+        self.update = dt.UpdateModel(self.u, transition=self.transition, measurement=self.measurement)
 
         # this is basically just a type-erased wrapper
         self.algorithm = dt.KalmanFilter(self.update)

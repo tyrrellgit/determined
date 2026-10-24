@@ -9,6 +9,6 @@ cov = np.array([
 ])
 
 epoch = dt.Epoch(0)
-state = dt.State(value, cov, epoch)
+state = dt.State(value, covariance=cov, epoch=epoch)
 
 print(state)

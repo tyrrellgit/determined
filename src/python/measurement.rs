@@ -24,6 +24,7 @@ pub struct PyObservation {
 #[pymethods]
 impl PyObservation {
     #[new]
+    #[pyo3(signature = (value, *, epoch))]
     fn new(
         value: PyReadonlyArray1<f64>,
         epoch: &PyEpoch

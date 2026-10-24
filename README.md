@@ -47,7 +47,7 @@ Then `import determined as dt`.
 ```python
 ekf = dt.ExtendedKalmanFilter(state, f=f, jac_f=jac_f, q=q, h=h, jac_h=jac_h, r=r)
 ekf.predict(dt.Epoch(1))
-ekf.update(dt.Observation(z, dt.Epoch(1)))
+ekf.update(dt.Observation(z, epoch=dt.Epoch(1)))
 ```
 
 See `examples/ekf.py`. Build a distributable wheel with `maturin build --release`.

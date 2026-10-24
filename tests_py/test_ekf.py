@@ -25,7 +25,7 @@ def make_ekf(state, f_mat, q, h_mat, r):
 class TestExtendedKalmanFilter(unittest.TestCase):
 
     def test_predict(self):
-        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(0))
+        state = dt.State(np.array([1.0, 1.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
         f = np.diag([2.0, 3.0])
         ekf = make_ekf(state, f, np.zeros((2, 2)), np.eye(2), np.eye(2))
 
@@ -49,14 +49,14 @@ class TestExtendedKalmanFilter(unittest.TestCase):
         r = np.array([[0.1]])
         value, cov = np.array([0.0, 1.0]), np.eye(2)
 
-        ekf = make_ekf(dt.State(value, cov, dt.Epoch(0)), f, q, h, r)
+        ekf = make_ekf(dt.State(value, covariance=cov, epoch=dt.Epoch(0)), f, q, h, r)
 
         # reference: closed-form KF implemented independently in numpy
         x, p = value.copy(), cov.copy()
         for t in range(1, 5):
             z = np.array([0.4 * t])
             ekf.predict(dt.Epoch(t))
-            out = ekf.update(dt.Observation(z, dt.Epoch(t)))
+            out = ekf.update(dt.Observation(z, epoch=dt.Epoch(t)))
 
             x, p = f @ x, f @ p @ f.T + q
             s = h @ p @ h.T + r
@@ -69,7 +69,7 @@ class TestExtendedKalmanFilter(unittest.TestCase):
     def test_range_sensor(self):
         """Nonlinear range sensor pulls the estimate to the truth."""
         truth_range = 5.0
-        state = dt.State(np.array([2.0, 2.0]), np.eye(2) * 4.0, dt.Epoch(0))
+        state = dt.State(np.array([2.0, 2.0]), covariance=np.eye(2) * 4.0, epoch=dt.Epoch(0))
         ekf = dt.ExtendedKalmanFilter(
             state,
             f=lambda x: x,
@@ -83,7 +83,7 @@ class TestExtendedKalmanFilter(unittest.TestCase):
         err = abs(np.linalg.norm(state.value) - truth_range)
         trace = np.trace(state.covariance)
         for t in range(1, 6):
-            out = ekf.update(dt.Observation(np.array([truth_range]), dt.Epoch(t)))
+            out = ekf.update(dt.Observation(np.array([truth_range]), epoch=dt.Epoch(t)))
             new_err = abs(np.linalg.norm(out.value) - truth_range)
             new_trace = np.trace(out.covariance)
             self.assertLess(new_err, err)
@@ -93,7 +93,7 @@ class TestExtendedKalmanFilter(unittest.TestCase):
 
     def test_callables_may_return_array_likes(self):
         """Lists / (N, 1) arrays are coerced, as AD libraries return their own types."""
-        state = dt.State(np.array([1.0, 2.0]), np.eye(2), dt.Epoch(0))
+        state = dt.State(np.array([1.0, 2.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
         ekf = dt.ExtendedKalmanFilter(
             state,
             f=lambda x: [float(x[0]), float(x[1])],
@@ -103,23 +103,23 @@ class TestExtendedKalmanFilter(unittest.TestCase):
             jac_h=lambda x: np.eye(2),
             r=np.eye(2),
         )
-        out = ekf.update(dt.Observation(np.array([1.0, 2.0]), dt.Epoch(1)))
+        out = ekf.update(dt.Observation(np.array([1.0, 2.0]), epoch=dt.Epoch(1)))
         np.testing.assert_allclose(out.value, [1.0, 2.0])
 
     def test_reset_and_state_setter(self):
-        state = dt.State(np.array([1.0, 1.0]), np.eye(2) * 3.0, dt.Epoch(0))
+        state = dt.State(np.array([1.0, 1.0]), covariance=np.eye(2) * 3.0, epoch=dt.Epoch(0))
         ekf = make_ekf(state, np.eye(2), np.eye(2), np.eye(2), np.eye(2))
 
         ekf.reset()
         np.testing.assert_array_equal(ekf.state.value, [0.0, 0.0])
         np.testing.assert_array_equal(ekf.state.covariance, np.eye(2))
 
-        ekf.state = dt.State(np.array([5.0, 6.0]), np.eye(2), dt.Epoch(3))
+        ekf.state = dt.State(np.array([5.0, 6.0]), covariance=np.eye(2), epoch=dt.Epoch(3))
         np.testing.assert_array_equal(ekf.state.value, [5.0, 6.0])
         self.assertEqual(ekf.state.epoch.value, 3)
 
     def test_bad_inputs_raise(self):
-        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(0))
+        state = dt.State(np.array([1.0, 1.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
         eye = np.eye(2)
 
         with self.assertRaises(TypeError):
@@ -138,7 +138,7 @@ class TestExtendedKalmanFilter(unittest.TestCase):
         # wrong observation size
         ekf = make_ekf(state, eye, eye, eye, eye)
         with self.assertRaises(ValueError):
-            ekf.update(dt.Observation(np.array([1.0]), dt.Epoch(1)))
+            ekf.update(dt.Observation(np.array([1.0]), epoch=dt.Epoch(1)))
 
         # errors raised inside the callable propagate
         def boom(x):
@@ -160,17 +160,17 @@ class TestMatrixLayout(unittest.TestCase):
         jac = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
 
         class Measurement:
-            def projection(self, s): return dt.Observation(np.zeros(2), s.epoch)
-            def inverse(self, o): return dt.State(np.zeros(3), np.eye(3), o.epoch)
+            def projection(self, s): return dt.Observation(np.zeros(2), epoch=s.epoch)
+            def inverse(self, o): return dt.State(np.zeros(3), covariance=np.eye(3), epoch=o.epoch)
             def jacobian(self, s): return jac
 
         model = dt.MeasurementModel(Measurement())
-        state = dt.State(np.zeros(3), np.eye(3), dt.Epoch(0))
+        state = dt.State(np.zeros(3), covariance=np.eye(3), epoch=dt.Epoch(0))
         np.testing.assert_array_equal(model.jacobian(state), jac)
 
     def test_covariance_roundtrip(self):
         cov = np.array([[1.0, 2.0], [3.0, 4.0]])
-        state = dt.State(np.zeros(2), cov, dt.Epoch(0))
+        state = dt.State(np.zeros(2), covariance=cov, epoch=dt.Epoch(0))
         np.testing.assert_array_equal(state.covariance, cov)
 
 
@@ -179,17 +179,17 @@ class TestLogging(unittest.TestCase):
     """Rust-side log messages arrive through Python's `logging`."""
 
     def test_singular_update_is_logged(self):
-        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(0))
+        state = dt.State(np.array([1.0, 1.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
         ekf = dt.ExtendedKalmanFilter(
             state, lambda x: x, lambda x: np.eye(2), np.zeros((2, 2)),
             lambda x: np.zeros(1), lambda x: np.zeros((1, 2)), np.zeros((1, 1)))
 
         with self.assertLogs("determined", level="ERROR") as logs:
-            ekf.update(dt.Observation(np.array([1.0]), dt.Epoch(0)))
+            ekf.update(dt.Observation(np.array([1.0]), epoch=dt.Epoch(0)))
         self.assertIn("singular", logs.output[0])
 
     def test_backward_predict_is_logged(self):
-        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(5))
+        state = dt.State(np.array([1.0, 1.0]), covariance=np.eye(2), epoch=dt.Epoch(5))
         ekf = make_ekf(state, np.eye(2), np.eye(2), np.eye(2), np.eye(2))
 
         with self.assertLogs("determined", level="WARNING") as logs:

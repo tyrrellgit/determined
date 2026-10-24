@@ -13,7 +13,7 @@ class TestMeasurementModel(unittest.TestCase):
 
         cls.value = np.array([1.0, 0.0])
         cls.epoch = dt.Epoch(0)
-        cls.state = dt.State(cls.value, np.eye(cls.value.size), cls.epoch)
+        cls.state = dt.State(cls.value, covariance=np.eye(cls.value.size), epoch=cls.epoch)
 
         h = np.array([
             [1.0, 0.0],

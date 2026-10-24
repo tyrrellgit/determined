@@ -37,6 +37,7 @@ impl Clone for PyTransitionModel {
 impl PyTransitionModel {
 
     #[new]
+    #[pyo3(signature = (model, *, state))]
     pub fn new(model: Py<PyAny>, state: PyState) -> Self {
         PyTransitionModel { model: model, state }
     }

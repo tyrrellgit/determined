@@ -42,6 +42,7 @@ impl Clone for PyUpdateModel {
 #[pymethods]
 impl PyUpdateModel {
     #[new]
+    #[pyo3(signature = (model, *, transition, measurement))]
     pub fn new(
         model: Py<PyAny>,
         transition: Py<PyTransitionModel>,
