@@ -219,7 +219,10 @@ impl PyExtendedKalmanFilter {
         let k = &p * &h_t * s_inv;
 
         let value = &x + &k * (z - z_x);
-        let cov = (na::DMatrix::<f64>::identity(n, n) - &k * &h) * &p;
+
+        // Joseph form: stays symmetric positive semi-definite under rounding
+        let i_kh = na::DMatrix::<f64>::identity(n, n) - &k * &h;
+        let cov = &i_kh * &p * i_kh.transpose() + &k * &self.r * k.transpose();
 
         self.write_back(value, cov, epoch);
         Ok(PyState { inner: self.state.inner.clone() })

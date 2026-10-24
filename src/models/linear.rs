@@ -242,8 +242,9 @@ impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for
         // Update state
         state.value = state.value + k * y;
 
-        // Update Covariance
-        state.covariance = Some((self.identity - k * h) * cov);
+        // Update Covariance (Joseph form: stays symmetric positive semi-definite)
+        let i_kh = self.identity - k * h;
+        state.covariance = Some(i_kh * cov * i_kh.transpose() + k * self.measurement.r * k.transpose());
 
         &self.state
 
