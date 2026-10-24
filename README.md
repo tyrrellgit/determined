@@ -20,6 +20,15 @@ The main modules are:
 - `crate::measurement` — measurement/observation helpers.
 - `crate::models` — traits for state transition and measurement models used by EKF.
 
+## Development environment
+
+A [Nix](https://nixos.org) flake provides the Rust toolchain, Python (with `numpy` and `pytest`) and `maturin`:
+
+```bash
+nix develop
+cargo test
+```
+
 ## Python
 
 Build and install the bindings into the current virtualenv with [maturin](https://www.maturin.rs):
