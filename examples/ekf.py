@@ -1,7 +1,8 @@
 """Extended Kalman filter tracking a static 2D target from range-only measurements.
 
-The model functions take and return plain numpy arrays, so the Jacobians could
-equally come from an autodiff library, e.g. `jac_h = jax.jacfwd(h)`.
+The model functions take the state value `x` and the integer epoch `t`, and
+return plain numpy arrays, so the Jacobians could equally come from an autodiff
+library, e.g. `jac_h = jax.jacfwd(h)` (which differentiates `x`, not `t`).
 """
 import numpy as np
 
@@ -11,19 +12,19 @@ import determined as dt
 state = dt.State(np.array([2.0, 2.0]), covariance=np.eye(2) * 4.0, epoch=dt.Epoch(0))
 
 
-def f(x):
+def f(x, t):
     return x                      # static target
 
 
-def jac_f(x):
+def jac_f(x, t):
     return np.eye(2)
 
 
-def h(x):
+def h(x, t):
     return np.array([np.linalg.norm(x)])
 
 
-def jac_h(x):
+def jac_h(x, t):
     return (x / np.linalg.norm(x))[None, :]
 
 

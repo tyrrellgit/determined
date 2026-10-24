@@ -5,8 +5,13 @@
 //! Unlike the type-erased `KalmanFilter` wrapper (where the Python object
 //! implements the whole update), this filter does the EKF maths in Rust and
 //! only calls back into Python for the model functions. The callables take
-//! and return plain numpy arrays (the state *value*), which suits automatic
-//! differentiation libraries, e.g. `jac_f = jax.jacfwd(f)`.
+//! the state *value* as a numpy array and the epoch `t` as an int, and return
+//! plain numpy arrays, which suits automatic differentiation libraries, e.g.
+//! `jac_f = jax.jacfwd(f)` (differentiates the first argument, `x`).
+//!
+//! States returned by `predict`/`update`/`state` are live, zero-copy views of
+//! the filter's internal state, not snapshots: they change on the next call.
+//! Copy the arrays (`state.value.copy()`) if you need to keep one.
 
 use pyo3::prelude::*;
 use pyo3::exceptions::{ PyTypeError, PyValueError };
@@ -46,15 +51,16 @@ fn check_square(m: &na::DMatrix<f64>, dim: usize, name: &str) -> PyResult<()> {
     }
 }
 
-/// Call `func(x)` and read the result as a vector of `len` elements.
+/// Call `func(x, t)` and read the result as a vector of `len` elements.
 fn call_vector(
     py: Python<'_>,
     func: &Py<PyAny>,
     name: &str,
     x: &na::DVector<f64>,
+    t: i64,
     len: usize,
 ) -> PyResult<na::DVector<f64>> {
-    let result = func.bind(py).call1((x.as_slice().to_pyarray(py),))?;
+    let result = func.bind(py).call1((x.as_slice().to_pyarray(py), t))?;
     let result = as_f64_array(py, result)?;
     let array: PyReadonlyArrayDyn<f64> = result.extract()?;
     let view = array.as_array();
@@ -65,16 +71,17 @@ fn call_vector(
     Ok(na::DVector::<f64>::from_iterator(len, view.iter().copied()))
 }
 
-/// Call `func(x)` and read the result as an `nrows` x `ncols` matrix.
+/// Call `func(x, t)` and read the result as an `nrows` x `ncols` matrix.
 fn call_matrix(
     py: Python<'_>,
     func: &Py<PyAny>,
     name: &str,
     x: &na::DVector<f64>,
+    t: i64,
     nrows: usize,
     ncols: usize,
 ) -> PyResult<na::DMatrix<f64>> {
-    let result = func.bind(py).call1((x.as_slice().to_pyarray(py),))?;
+    let result = func.bind(py).call1((x.as_slice().to_pyarray(py), t))?;
     let result = as_f64_array(py, result)?;
     let array: PyReadonlyArray2<f64> = result.extract().map_err(|_| {
         PyValueError::new_err(format!("{name}() must return a 2D array"))
@@ -132,8 +139,8 @@ impl PyExtendedKalmanFilter {
         }
 
         for _ in 0..delta {
-            let jac = call_matrix(py, &self.jac_f, "jac_f", &x, n, n)?;
-            let next = call_vector(py, &self.f, "f", &x, n)?;
+            let jac = call_matrix(py, &self.jac_f, "jac_f", &x, current.value, n, n)?;
+            let next = call_vector(py, &self.f, "f", &x, current.value, n)?;
             p = &jac * &p * jac.transpose() + &self.q;
             x = next;
             current = current + Epoch::new(1);
@@ -148,13 +155,16 @@ impl PyExtendedKalmanFilter {
 impl PyExtendedKalmanFilter {
     /// ExtendedKalmanFilter(state, f, jac_f, q, h, jac_h, r)
     ///
-    /// f(x) -> x'        one-step state propagation, shape (N,)
-    /// jac_f(x) -> F     Jacobian of f, shape (N, N)
-    /// h(x) -> z         measurement function, shape (M,)
-    /// jac_h(x) -> H     Jacobian of h, shape (M, N)
+    /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
+    /// jac_f(x, t) -> F  Jacobian of f, shape (N, N)
+    /// h(x, t) -> z      measurement function at epoch t, shape (M,)
+    /// jac_h(x, t) -> H  Jacobian of h, shape (M, N)
     /// q, r              process (N, N) and measurement (M, M) noise
+    ///
+    /// `t` is the integer epoch value. All arguments after `state` are
+    /// keyword-only. The returned states are live views of the filter state.
     #[new]
-    #[pyo3(signature = (state, f, jac_f, q, h, jac_h, r))]
+    #[pyo3(signature = (state, *, f, jac_f, q, h, jac_h, r))]
     fn new(
         py: Python<'_>,
         state: PyState,
@@ -201,8 +211,8 @@ impl PyExtendedKalmanFilter {
         let (x, p, epoch) = self.snapshot();
 
         // project the state to the measurement domain, linearised about it
-        let z_x = call_vector(py, &self.h, "h", &x, m)?;
-        let h = call_matrix(py, &self.jac_h, "jac_h", &x, m, n)?;
+        let z_x = call_vector(py, &self.h, "h", &x, epoch.value, m)?;
+        let h = call_matrix(py, &self.jac_h, "jac_h", &x, epoch.value, m, n)?;
 
         // innovation covariance and gain
         let h_t = h.transpose();
