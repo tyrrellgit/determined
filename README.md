@@ -40,7 +40,17 @@ maturin develop --release      # editable-style install for development
 pip install .                  # builds and installs a wheel (needs a Rust toolchain)
 ```
 
-Then `import determined as dt`. Build a distributable wheel with `maturin build --release`.
+Then `import determined as dt`.
+
+`dt.ExtendedKalmanFilter` runs the filter maths in Rust and calls back into Python for the model. The model functions take and return plain numpy arrays, so Jacobians can come from an autodiff library (e.g. `jax.jacfwd`):
+
+```python
+ekf = dt.ExtendedKalmanFilter(state, f=f, jac_f=jac_f, q=q, h=h, jac_h=jac_h, r=r)
+ekf.predict(dt.Epoch(1))
+ekf.update(dt.Observation(z, dt.Epoch(1)))
+```
+
+See `examples/ekf.py`. Build a distributable wheel with `maturin build --release`.
 
 ## Examples
 <img src="docs/assets/TwoMassSpringDamperScene_ManimCE_v0.19.1.gif" alt="spring damper example"/>

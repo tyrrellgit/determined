@@ -7,10 +7,10 @@ pub mod measurement;
 pub mod update;
 pub mod algorithms;
 pub mod arrays;
+pub mod ekf;
 
 use pyo3::prelude::*;
 
-///TODO: Update Model, KalmanFilter
 #[pymodule]
 fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Structs
@@ -25,6 +25,7 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     
     // Algorithms
     m.add_class::<algorithms::PyKalmanFilter>()?;
+    m.add_class::<ekf::PyExtendedKalmanFilter>()?;
 
     Ok(())
 }
