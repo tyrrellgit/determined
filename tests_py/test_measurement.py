@@ -39,3 +39,6 @@ class TestMeasurementModel(unittest.TestCase):
         jac = self.measurement.jacobian(self.state)
 
         assert jac is not None, "Jacobian is None!"
+
+    def test_noise(self):
+        np.testing.assert_array_equal(self.measurement.noise(), self.model.r)

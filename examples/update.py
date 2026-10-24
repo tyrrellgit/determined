@@ -24,7 +24,7 @@ class LinearUpdate:
         # compute gains
         h = self.m.model.h
         h_t = h.transpose()
-        r = self.m.model.r
+        r = self.m.noise()
         s = h @ _cov @ h_t + r
         s_inv = np.linalg.pinv(s)
 
@@ -36,10 +36,6 @@ class LinearUpdate:
         cov = (np.eye(value.size) - k @ h) @ _cov
 
         return dt.State(value, covariance=cov, epoch=epoch)
-
-    def jacobian(self, state: dt.State):
-        jac = self.t.jacobian(state)
-        return jac
 
 value = np.array([1.0, 0.0])
 epoch = dt.Epoch(0)
@@ -56,8 +52,6 @@ if __name__ == "__main__":
 
     future_state = update.state(epoch)
     new_state = update.apply(obs)
-    jac = update.jacobian(state)
 
     print(future_state)
     print(new_state)
-    print(jac)

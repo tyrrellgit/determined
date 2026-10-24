@@ -17,7 +17,9 @@ use crate::state::{ State, StatePtr };
 use na::allocator::Allocator;
 
 use crate::models::traits::{ 
-    TransitionModel, MeasurementModel, UpdateModel
+    TransitionModel, TransitionJacobian,
+    MeasurementModel, MeasurementJacobian, InverseMeasurement,
+    UpdateModel,
 };
 use crate::models::update::kalman_update;
 
@@ -100,7 +102,13 @@ where
         *self.state.write().unwrap() = state;
         &self.state
     }
+}
 
+impl<N> TransitionJacobian<N> for NonLinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
     fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, N, N> {
         (self.j)(_state)
     }
@@ -173,6 +181,29 @@ where
         }
     }
 
+    fn noise(&self) -> na::OMatrix<f64, M, M> {
+        self.r.clone()
+    }
+}
+
+impl<N, M> MeasurementJacobian<N, M> for NonLinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, M, N> {
+        (self.j)(state)
+    }
+}
+
+impl<N, M> InverseMeasurement<N, M> for NonLinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    /// Uses the function supplied with `with_inverse`, if any.
     fn inverse(&self, obs: &Observation<M>) -> State<N> {
         match &self.h_inv {
             Some(h_inv) => h_inv(obs),
@@ -189,10 +220,6 @@ where
                 }
             }
         }
-    }
-
-    fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, M, N> {
-        (self.j)(state)
     }
 }
 
@@ -254,14 +281,10 @@ where
         let z_x = self.measurement.projection(&state).value;
         let h = self.measurement.jacobian(&state);
 
-        if kalman_update(&mut state, &observation.value, &z_x, &h, &self.measurement.r) {
+        if kalman_update(&mut state, &observation.value, &z_x, &h, &self.measurement.noise()) {
             *self.state.write().unwrap() = state;
         }
 
         &self.state
-    }
-
-    fn jacobian(&self, _x: &State<N>) -> na::OMatrix<f64, M, N> {
-        self.measurement.jacobian(_x)
     }
 }

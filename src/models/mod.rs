@@ -5,6 +5,7 @@ pub mod update;
 
 pub use traits::DefaultFromState;
 pub use traits::{ TransitionModel, MeasurementModel, UpdateModel };
+pub use traits::{ TransitionJacobian, MeasurementJacobian, InverseMeasurement };
 pub use linear::{
     LinearTransition, LinearMeasurement, LinearUpdate,
     LinearTransitionN, LinearMeasurementNM, LinearUpdateNM,

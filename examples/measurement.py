@@ -18,6 +18,9 @@ class LinearMeasurement:
         cov = np.eye(x.size)
         return dt.State(x, covariance=cov, epoch=observation.epoch)
 
+    def noise(self):
+        return self.r
+
     def jacobian(self, state: dt.State):
         return self.jac
 
@@ -39,6 +42,7 @@ if __name__ == "__main__":
     obs = measurement.projection(state)
     inv = measurement.inverse(obs)
     jac = measurement.jacobian(state)
+    r = measurement.noise()
 
     print(state)
     print(obs)

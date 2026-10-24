@@ -17,6 +17,9 @@ class LinearMeasurement:
         cov = np.eye(x.size)
         return dt.State(x, covariance=cov, epoch=observation.epoch)
 
+    def noise(self):
+        return self.r
+
     def jacobian(self, state: dt.State):
         return self.jac
 
@@ -61,7 +64,7 @@ class LinearUpdate:
         # compute gains
         h = self.m.model.h
         h_t = h.transpose()
-        r = self.m.model.r
+        r = self.m.noise()
         s = h @ _cov @ h_t + r
         s_inv = np.linalg.pinv(s)
 
@@ -73,7 +76,3 @@ class LinearUpdate:
         cov = (np.eye(value.size) - k @ h) @ _cov
 
         return dt.State(value, covariance=cov, epoch=epoch)
-
-    def jacobian(self, state: dt.State):
-        jac = self.t.jacobian(state)
-        return jac

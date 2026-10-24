@@ -14,7 +14,9 @@ use crate::state::{ State, StatePtr };
 use na::allocator::Allocator;
 
 use crate::models::traits::{ 
-    TransitionModel, MeasurementModel, UpdateModel, DefaultFromState
+    TransitionModel, TransitionJacobian,
+    MeasurementModel, MeasurementJacobian, InverseMeasurement,
+    UpdateModel, DefaultFromState
 };
 use crate::models::update::kalman_update;
 
@@ -115,8 +117,14 @@ where
         state.epoch = *epoch;
         &self.state
     }
+}
 
-    // TODO: update to proper jacobian
+impl<N> TransitionJacobian<N> for LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    /// The Jacobian of a linear transition is F.
     fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, N, N> {
         self.f.clone()
     }
@@ -183,16 +191,36 @@ where
         }
     }
 
+    fn noise(&self) -> na::OMatrix<f64, M, M> {
+        self.r.clone()
+    }
+}
+
+impl<N, M> MeasurementJacobian<N, M> for LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    /// The Jacobian of a linear measurement is H.
+    fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, M, N> {
+        self.h.clone()
+    }
+}
+
+impl<N, M> InverseMeasurement<N, M> for LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    /// Pseudo-inverse projection; zero if H is rank deficient.
     fn inverse(&self, obs: &Observation<M>) -> State<N> {
         State {
             value: &self.h_inv * &obs.value,
             covariance: None,
             epoch: obs.epoch,
         }
-    } // TODO: probably dont need this since its could often be ill-defined
-
-    fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, M, N> {
-        self.h.clone() // TODO: code proper jacobian
     }
 }
 
@@ -271,13 +299,10 @@ where
         // project state to measurement domain
         let z_x = self.measurement.projection(&state).value;
 
-        kalman_update(&mut state, &observation.value, &z_x, &self.measurement.h, &self.measurement.r);
+        let h = self.measurement.jacobian(&state);
+        let r = self.measurement.noise();
+        kalman_update(&mut state, &observation.value, &z_x, &h, &r);
 
         &self.state
-    }
-
-    // code proper jacobian
-    fn jacobian(&self, _x: &State<N>) -> na::OMatrix<f64, M, N> {
-        self.measurement.h.clone()
     }
 }

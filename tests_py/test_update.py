@@ -52,7 +52,3 @@ class TestUpdateModel(unittest.TestCase):
     def test_apply(self):
         new_state = self.update.apply(self.obs)
         assert isinstance(new_state, dt.State), "state should be dt.State"
-
-    def test_jacobian(self):
-        jac = self.update.jacobian(self.state)
-        assert jac is not None, "Jacobian is None!"
