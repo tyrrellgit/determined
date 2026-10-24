@@ -1,6 +1,6 @@
 //! `Filter` is a trait for basic algorithms. 
 
-use crate::common::Epoch;
+use crate::epoch::Epoch;
 
 /// Core Filter trait shared across algorithm implementations.
 ///
@@ -17,9 +17,8 @@ pub trait Filter {
     type StateType;
     type ObservationType;
 
-    fn predict<'a>(&'a mut self, epoch: &Epoch) -> &'a Self::StateType;
-    fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> &'a Self::StateType;
-    fn state(&self) -> &Self::StateType;
-    fn state_mut(&mut self) -> &mut Self::StateType;
+    fn predict(&mut self, epoch: &Epoch) -> Self::StateType;
+    fn update(&mut self, observation: &Self::ObservationType) -> Self::StateType;
+    fn state(&self) -> Self::StateType;
     fn reset(&mut self);
 }

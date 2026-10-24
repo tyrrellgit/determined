@@ -5,151 +5,81 @@
 //! they can be used in `no_std`/embedded contexts with predictable memory
 //! usage.
 
-use crate::common::na as na;
-use crate::state::State;
-use crate::common::Epoch;
+use crate::common::na;
+use crate::state::StatePtr;
+use crate::measurement::Observation;
+use crate::epoch::Epoch;
 use crate::filter::Filter;
-use crate::models::{StateTransition, MeasurementModel};
+use crate::models::{
+    UpdateModel, LinearUpdate,
+    DefaultFromState
+};
 
-/// KalmanFilter: statically sized (SMatrix) implementation.
-#[derive(Clone, Debug)]
-pub struct KalmanFilter<const N: usize, const M: usize> {
-    pub x: State<N, 1>,                         // state vector (N x 1)
-    pub p: na::SMatrix<f64, N, N>,             // covariance (N x N)
-    pub f: na::SMatrix<f64, N, N>,             // state transition (N x N)
-    pub q: na::SMatrix<f64, N, N>,             // process noise (N x N)
-    pub h: na::SMatrix<f64, M, N>,             // measurement matrix (M x N)
-    pub r: na::SMatrix<f64, M, M>,             // measurement noise (M x M)
+
+/// Generic Kalman Filter implementation for statically sized
+/// state transition and measurement models.
+pub struct KalmanFilterT<const N: usize, const M: usize, T>
+where
+    T: UpdateModel<na::Const<N>, na::Const<M>>
+{
+    pub state: StatePtr<na::Const<N>>,
+    pub update: T,
 }
 
-impl<const N: usize, const M: usize> KalmanFilter<N, M> {
-
-    pub fn new() -> Self {
-        KalmanFilter {
-            x: State::new(0.0, 0),
-            p: na::SMatrix::<f64, N, N>::identity(),
-            f: na::SMatrix::<f64, N, N>::identity(),
-            q: na::SMatrix::<f64, N, N>::zeros(),
-            h: na::SMatrix::<f64, M, N>::zeros(),
-            r: na::SMatrix::<f64, M, M>::identity(),
+/// Implementation for constructors
+impl<const N: usize, const M: usize, T> KalmanFilterT<N, M, T>
+where
+    T: UpdateModel<na::Const<N>, na::Const<M>>
+        + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
+{
+    pub fn new(
+        state: StatePtr<na::Const<N>>,
+        update: T,
+    ) -> Self {
+        KalmanFilterT {
+            state,
+            update,
         }
     }
 
-    pub fn builder() -> Self {
-        // convenience builder -> default values
-        KalmanFilter::new()
-    }
-}
-
-impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
-    type StateType = State<N, 1>;
-    type ObservationType = State<M, 1>;
-
-    fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
-        self.x.value = &self.f * &self.x.value;
-        self.p = &self.f * &self.p * self.f.transpose() + &self.q;
-        &self.x
-    }
-
-    fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> &'a Self::StateType {
-        let z = &observation.value;
-        let s = &self.h * &self.p * self.h.transpose() + &self.r;
-        let s_inv = s.try_inverse().expect("innovation covariance S is singular");
-        let k = &self.p * self.h.transpose() * s_inv;
-        let y = z - &self.h * &self.x.value;
-
-        self.x.value = &self.x.value + &k * y;
-
-        let i = na::SMatrix::<f64, N, N>::identity();
-        self.p = (i - &k * &self.h) * &self.p;
-        &self.x
-    }
-
-    fn state(&self) -> &Self::StateType {
-        &self.x
-    }
-
-    fn state_mut(&mut self) -> &mut Self::StateType {
-        &mut self.x
-    }
-
-    fn reset(&mut self) {
-        self.x.value.fill(0.0);
-        self.p = na::SMatrix::<f64, N, N>::identity();
-    }
-}
-
-/// Extended Kalman Filter implementation using given state transition and measurement models.
-pub struct Ekf<const N: usize, const M: usize, T, U>
-where
-    T: StateTransition<N>,
-    U: MeasurementModel<N, M>,
-{
-    pub x: State<N, 1>,
-    pub p: na::SMatrix<f64, N, N>,
-    pub q: na::SMatrix<f64, N, N>,
-    pub r: na::SMatrix<f64, M, M>,
-    pub transition: T,
-    pub measurement: U,
-}
-
-impl<const N: usize, const M: usize, T, U> Ekf<N, M, T, U>
-where
-    T: StateTransition<N>,
-    U: MeasurementModel<N, M>,
-{
-    pub fn new(transition: T, measurement: U) -> Self {
-        Ekf {
-            x: State::<N, 1>::new(0.0, 0),
-            p: na::SMatrix::<f64, N, N>::identity(),
-            q: na::SMatrix::<f64, N, N>::zeros(),
-            r: na::SMatrix::<f64, M, M>::identity(),
-            transition,
-            measurement,
+    pub fn default_from_state(state: StatePtr<na::Const<N>>) -> Self {
+        KalmanFilterT {
+            state: state.clone(),
+            update: T::default_from_state(state),
         }
     }
 }
 
-impl<const N: usize, const M: usize, T, U> Filter for Ekf<N, M, T, U>
+/// Filter trait implementation
+impl<const N: usize, const M: usize, T> Filter for KalmanFilterT<N, M, T>
 where
-    T: StateTransition<N> + Default,
-    U: MeasurementModel<N, M> + Default,
+    T: UpdateModel<na::Const<N>, na::Const<M>>,
 {
-    type StateType = State<N, 1>;
-    type ObservationType = State<M, 1>;
+    type StateType = StatePtr<na::Const<N>>;
+    type ObservationType = Observation<na::Const<M>>;
 
-    fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
-        let x_pred = self.transition.f(&self.x.value, None);
-        self.x.value = x_pred;
-        let j = self.transition.jacobian(&self.x.value);
-        self.p = &j * &self.p * j.transpose() + &self.q;
-        &self.x
+    fn predict(&mut self, _epoch: &Epoch) -> Self::StateType {
+        self.update.state(_epoch).clone()
     }
 
-    fn update<'a>(&'a mut self, observation: &Self::ObservationType) -> &'a Self::StateType {
-        let z = &observation.value;
-        let h_x = self.measurement.h(&self.x.value);
-        let h = self.measurement.jacobian(&self.x.value);
-        let s = &h * &self.p * h.transpose() + &self.r;
-        let s_inv = s.try_inverse().expect("innovation covariance S is singular");
-        let k = &self.p * h.transpose() * s_inv;
-        let y = z - h_x;
-        self.x.value = &self.x.value + &k * y;
-        let i = na::SMatrix::<f64, N, N>::identity();
-        self.p = (i - &k * &h) * &self.p;
-        &self.x
+    fn update(&mut self, observation: &Self::ObservationType) -> Self::StateType {
+        self.update.apply(observation).clone()
     }
 
-    fn state(&self) -> &Self::StateType {
-        &self.x
-    }
-
-    fn state_mut(&mut self) -> &mut Self::StateType {
-        &mut self.x
+    fn state(&self) -> Self::StateType {
+        self.state.clone()
     }
 
     fn reset(&mut self) {
-        self.x.value.fill(0.0);
-        self.p = na::SMatrix::<f64, N, N>::identity();
+        let mut state = self.state.write().unwrap();
+        state.value.fill(0.0);
+        state.covariance = Some(na::SMatrix::<f64, N, N>::identity());
     }
 }
+
+/// KalmanFilter
+pub type KalmanFilterNM<const N: usize, const M: usize> =
+    KalmanFilterT<
+        N, M, 
+        LinearUpdate<N, M>
+    >;
