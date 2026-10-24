@@ -174,5 +174,28 @@ class TestMatrixLayout(unittest.TestCase):
         np.testing.assert_array_equal(state.covariance, cov)
 
 
+
+class TestLogging(unittest.TestCase):
+    """Rust-side log messages arrive through Python's `logging`."""
+
+    def test_singular_update_is_logged(self):
+        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(0))
+        ekf = dt.ExtendedKalmanFilter(
+            state, lambda x: x, lambda x: np.eye(2), np.zeros((2, 2)),
+            lambda x: np.zeros(1), lambda x: np.zeros((1, 2)), np.zeros((1, 1)))
+
+        with self.assertLogs("determined", level="ERROR") as logs:
+            ekf.update(dt.Observation(np.array([1.0]), dt.Epoch(0)))
+        self.assertIn("singular", logs.output[0])
+
+    def test_backward_predict_is_logged(self):
+        state = dt.State(np.array([1.0, 1.0]), np.eye(2), dt.Epoch(5))
+        ekf = make_ekf(state, np.eye(2), np.eye(2), np.eye(2), np.eye(2))
+
+        with self.assertLogs("determined", level="WARNING") as logs:
+            ekf.predict(dt.Epoch(2))
+        self.assertIn("Backward", logs.output[0])
+
+
 if __name__ == "__main__":
     unittest.main()

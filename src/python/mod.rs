@@ -8,11 +8,15 @@ pub mod update;
 pub mod algorithms;
 pub mod arrays;
 pub mod ekf;
+pub mod logging;
 
 use pyo3::prelude::*;
 
 #[pymodule]
 fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Route Rust log messages to Python's `logging`
+    logging::install()?;
+
     // Structs
     m.add_class::<epoch::PyEpoch>()?;
     m.add_class::<state::PyState>()?;
