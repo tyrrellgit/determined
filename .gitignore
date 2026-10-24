@@ -20,5 +20,8 @@ __pycache__/
 # Media
 media/
 
-#VSCode files
-.vscode/
+# Python build artefacts
+*.so
+*.egg-info/
+.venv/
+dist/
