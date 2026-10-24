@@ -25,7 +25,7 @@ The main modules are:
 
 ## Development environment
 
-A [Nix](https://nixos.org) flake provides the Rust toolchain, Python (with `numpy` and `pytest`) and `maturin`:
+A [Nix](https://nixos.org) flake provides the Rust toolchain, Python (with `numpy`, `pytest` and [Manim Community](https://www.manim.community) including its native dependencies such as cairo and pango) and `maturin`:
 
 ```bash
 nix develop
