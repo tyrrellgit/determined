@@ -26,15 +26,15 @@ fn test_extended_kalman_matches_linear() {
     let r = &na::SMatrix::<f64, 2, 2>::identity() * 0.01;
 
     // Linear filter
-    let mut kf = KalmanFilterNM::new(LinearUpdate::<2, 2>::new(
-        LinearMeasurement::<2, 2>::new(h, r),
-        LinearTransition::<2>::new(initial_state().ptr(), f, q),
+    let mut kf = KalmanFilterNM::new(LinearUpdateNM::<2, 2>::new(
+        LinearMeasurementNM::<2, 2>::new(h, r),
+        LinearTransitionN::<2>::new(initial_state().ptr(), f, q),
     ));
 
     // Extended filter
-    let mut ekf = ExtendedKalmanFilterNM::new(NonLinearUpdate::<2, 2>::new(
-        NonLinearMeasurement::<2, 2>::linear(h, r),
-        NonLinearTransition::<2>::new(
+    let mut ekf = ExtendedKalmanFilterNM::new(NonLinearUpdateNM::<2, 2>::new(
+        NonLinearMeasurementNM::<2, 2>::linear(h, r),
+        NonLinearTransitionN::<2>::new(
             initial_state().ptr(),
             Box::new(move |state| f * state.value),
             Box::new(move |_| f),
@@ -67,11 +67,11 @@ fn test_extended_kalman_matches_linear() {
 /// Multi-step prediction applies `f` once per epoch, and is idempotent.
 #[test]
 fn test_extended_kalman_predict_steps() {
-    let mut ekf = ExtendedKalmanFilterNM::new(NonLinearUpdate::<2, 2>::new(
-        NonLinearMeasurement::<2, 2>::linear(
+    let mut ekf = ExtendedKalmanFilterNM::new(NonLinearUpdateNM::<2, 2>::new(
+        NonLinearMeasurementNM::<2, 2>::linear(
             na::SMatrix::<f64, 2, 2>::identity(),
             na::SMatrix::<f64, 2, 2>::identity()),
-        NonLinearTransition::<2>::new(
+        NonLinearTransitionN::<2>::new(
             initial_state().ptr(),
             Box::new(|state| state.value * 2.0),
             Box::new(|_| na::SMatrix::<f64, 2, 2>::identity() * 2.0),
@@ -94,7 +94,7 @@ fn test_extended_kalman_predict_steps() {
 fn test_extended_kalman_range_sensor() {
     let truth_range = 5.0; // true position is (3, 4)
 
-    let measurement = NonLinearMeasurement::<2, 1>::new(
+    let measurement = NonLinearMeasurementNM::<2, 1>::new(
         Box::new(|state| na::SMatrix::<f64, 1, 1>::new(state.value.norm())),
         Box::new(|state| {
             let rng = state.value.norm();
@@ -104,7 +104,7 @@ fn test_extended_kalman_range_sensor() {
     );
 
     // static target
-    let transition = NonLinearTransition::<2>::new(
+    let transition = NonLinearTransitionN::<2>::new(
         State::<na::Const<2>>::new(
             vec![2.0, 2.0],
             vec![vec![4.0, 0.0], vec![0.0, 4.0]],
@@ -115,7 +115,7 @@ fn test_extended_kalman_range_sensor() {
     );
 
     let mut ekf = ExtendedKalmanFilterNM::new(
-        NonLinearUpdate::<2, 1>::new(measurement, transition));
+        NonLinearUpdateNM::<2, 1>::new(measurement, transition));
 
     let mut err = (2.0f64 * 2.0 + 2.0 * 2.0).sqrt() - truth_range;
     let mut trace = 8.0;

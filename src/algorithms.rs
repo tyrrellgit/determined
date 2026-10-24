@@ -1,11 +1,14 @@
 //! Algorithms module
 //!
-//! Contains concrete filter algorithm implementations. The implementations are
-//! intentionally written using nalgebra's statically sized `SMatrix` types so
-//! they can be used in `no_std`/embedded contexts with predictable memory
-//! usage.
+//! Contains concrete filter algorithm implementations. They are generic over
+//! the dimension type: use the `...NM` aliases for nalgebra's statically sized
+//! matrices (predictable, allocation-free memory usage for `no_std`/embedded
+//! contexts), or the `...Dyn` aliases for sizes only known at runtime (as used
+//! by the Python bindings).
 
-use crate::common::na;
+use std::marker::PhantomData;
+
+use crate::common::{ na, FilterAllocator };
 use crate::state::StatePtr;
 use crate::measurement::Observation;
 use crate::epoch::Epoch;
@@ -17,38 +20,49 @@ use crate::models::{
 };
 
 
-/// Generic Kalman Filter implementation for statically sized
-/// state transition and measurement models.
-pub struct KalmanFilterT<const N: usize, const M: usize, T>
+/// Generic Kalman Filter implementation for a state of dimension `N` and
+/// measurements of dimension `M`, built from an update model `T`.
+pub struct KalmanFilterT<N, M, T>
 where
-    T: UpdateModel<na::Const<N>, na::Const<M>>
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+    T: UpdateModel<N, M>
 {
-    pub state: StatePtr<na::Const<N>>,
+    pub state: StatePtr<N>,
     pub update: T,
+    _measurement: PhantomData<fn() -> M>,
 }
 
 /// Impementation for Defaults
-impl<const N: usize, const M: usize, T> DefaultFromState for KalmanFilterT<N, M, T>
+impl<N, M, T> DefaultFromState for KalmanFilterT<N, M, T>
 where
-    T: UpdateModel<na::Const<N>, na::Const<M>>
-        + DefaultFromState<StateType = StatePtr<na::Const<N>>, DefaultType = T>,
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+    T: UpdateModel<N, M>
+        + DefaultFromState<StateType = StatePtr<N>, DefaultType = T>,
 {   
     type DefaultType = Self;
-    type StateType = StatePtr<na::Const<N>>;
+    type StateType = StatePtr<N>;
     
     fn default_from_state(state: Self::StateType) -> Self::DefaultType {
         KalmanFilterT {
             state: state.clone(),
             update: T::default_from_state(state),
+            _measurement: PhantomData,
         }
     }
 
 }
 
 /// Implementation for constructors
-impl<const N: usize, const M: usize, T> KalmanFilterT<N, M, T>
+impl<N, M, T> KalmanFilterT<N, M, T>
 where
-    T: UpdateModel<na::Const<N>, na::Const<M>>,
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+    T: UpdateModel<N, M>,
 {
     pub fn new(
         mut update: T,
@@ -57,17 +71,21 @@ where
         KalmanFilterT {
             state: state.clone(),
             update,
+            _measurement: PhantomData,
         }
     }
 }
 
 /// Filter trait implementation
-impl<const N: usize, const M: usize, T> Filter for KalmanFilterT<N, M, T>
+impl<N, M, T> Filter for KalmanFilterT<N, M, T>
 where
-    T: UpdateModel<na::Const<N>, na::Const<M>>,
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+    T: UpdateModel<N, M>,
 {
-    type StateType = StatePtr<na::Const<N>>;
-    type ObservationType = Observation<na::Const<M>>;
+    type StateType = StatePtr<N>;
+    type ObservationType = Observation<M>;
 
     fn predict(&mut self, _epoch: &Epoch) -> Self::StateType {
         self.update.state(Some(_epoch)).clone()
@@ -83,21 +101,30 @@ where
 
     fn reset(&mut self) {
         let mut state = self.state.write().unwrap();
+        let (n, _) = state.value.shape_generic();
         state.value.fill(0.0);
-        state.covariance = Some(na::SMatrix::<f64, N, N>::identity());
+        state.covariance = Some(na::OMatrix::<f64, N, N>::identity_generic(n, n));
     }
 }
 
 /// KalmanFilter
 pub type KalmanFilterNM<const N: usize, const M: usize> =
     KalmanFilterT<
-        N, M, 
-        LinearUpdate<N, M>
+        na::Const<N>, na::Const<M>,
+        LinearUpdate<na::Const<N>, na::Const<M>>
     >;
+
+/// KalmanFilter with runtime sized state and measurement
+pub type KalmanFilterDyn =
+    KalmanFilterT<na::Dyn, na::Dyn, LinearUpdate<na::Dyn, na::Dyn>>;
 
 /// Extended Kalman Filter
 pub type ExtendedKalmanFilterNM<const N: usize, const M: usize> =
     KalmanFilterT<
-        N, M,
-        NonLinearUpdate<N, M>
+        na::Const<N>, na::Const<M>,
+        NonLinearUpdate<na::Const<N>, na::Const<M>>
     >;
+
+/// Extended Kalman Filter with runtime sized state and measurement
+pub type ExtendedKalmanFilterDyn =
+    KalmanFilterT<na::Dyn, na::Dyn, NonLinearUpdate<na::Dyn, na::Dyn>>;

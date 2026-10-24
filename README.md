@@ -3,9 +3,11 @@ A lightweight library for some basic filtering methods
 
 ## Documentation
 
-This crate implements small, statically-sized Kalman and Extended Kalman Filter
-implementations using nalgebra's `SMatrix` for predictable, allocation-free
-linear algebra.
+This crate implements small Kalman and Extended Kalman Filters on nalgebra
+matrices. The models are generic over the dimension type, so the same
+implementation serves statically sized matrices (`KalmanFilterNM<N, M>`,
+`LinearUpdateNM<N, M>`, ... for predictable, allocation-free linear algebra)
+and runtime sized ones (`KalmanFilterDyn`, `ExtendedKalmanFilterDyn`).
 
 Generate API documentation locally with:
 

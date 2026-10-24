@@ -10,7 +10,7 @@ use rand;
 use rand_distr::Distribution;
 
 use determined::algorithms::{ KalmanFilterNM };
-use determined::models::{ LinearTransition, LinearMeasurement, LinearUpdate };
+use determined::models::{ LinearTransitionN, LinearMeasurementNM, LinearUpdateNM };
 use determined::filter::Filter;
 use determined::state::State;
 use determined::measurement::Observation;
@@ -71,19 +71,19 @@ fn setup_two_mass_spring_damper_filter() -> (
             epoch: Epoch::new(0)
         }.ptr();
 
-    let transition = LinearTransition::<4>::new(
+    let transition = LinearTransitionN::<4>::new(
         x.clone(),
         f,
         q
     );
 
-    let measurement = LinearMeasurement::<4, 2>::new(
+    let measurement = LinearMeasurementNM::<4, 2>::new(
         h,
         r
     );
 
     // build algorithm update model
-    let update = LinearUpdate::<4, 2>::new(
+    let update = LinearUpdateNM::<4, 2>::new(
         measurement,
         transition
     );

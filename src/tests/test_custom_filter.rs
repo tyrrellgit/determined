@@ -26,7 +26,7 @@ fn test_kalman_custom() {
     
     let q = &na::SMatrix::<f64, 2,2>::identity() * 0.05;
 
-    let transition = LinearTransition::<2>::new(
+    let transition = LinearTransitionN::<2>::new(
         state.clone(),
         f,
         q
@@ -36,13 +36,13 @@ fn test_kalman_custom() {
     let h = na::SMatrix::<f64, 2, 2>::identity();
     let r = &na::SMatrix::<f64, 2, 2>::identity() * 0.01;
 
-    let measurement = LinearMeasurement::<2, 2>::new(
+    let measurement = LinearMeasurementNM::<2, 2>::new(
         h, // observation model
         r  // observation noise
     );
 
     // Kalman Update Model
-    let update = LinearUpdate::<2, 2>::new(
+    let update = LinearUpdateNM::<2, 2>::new(
         measurement,
         transition
     );

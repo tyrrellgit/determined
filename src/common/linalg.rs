@@ -1,14 +1,22 @@
 use nalgebra as na;
+use na::allocator::Allocator;
 
-pub fn moore_penrose_right_inverse<T, const R: usize, const C: usize>(
-    a: &na::SMatrix<T, R, C>,
-) -> Option<na::SMatrix<T, C, R>>
+/// Moore-Penrose pseudo-inverse of a full-rank matrix.
+///
+/// Uses the left inverse `(A^T A)^-1 A^T` when `A` has full column rank (tall
+/// or square), otherwise the right inverse `A^T (A A^T)^-1` when it has full
+/// row rank (wide). Returns `None` if `A` is rank deficient.
+pub fn moore_penrose_inverse<T, R, C>(a: &na::OMatrix<T, R, C>) -> Option<na::OMatrix<T, C, R>>
 where
-    T: nalgebra::RealField,
+    T: na::RealField,
+    R: na::Dim,
+    C: na::Dim,
+    na::DefaultAllocator: Allocator<R, C> + Allocator<C, R> + Allocator<C, C> + Allocator<R, R>,
 {
-    // Moore-Penrose right inverse: A^+ = (A^T A)^-1 A^T
     let a_t = a.transpose();
-    let ata = &a_t * a;
-    let ata_inv = ata.try_inverse()?;
-    Some(&ata_inv * &a_t)
+    if let Some(ata_inv) = (&a_t * a).try_inverse() {
+        return Some(ata_inv * a_t);
+    }
+    let aat_inv = (a * &a_t).try_inverse()?;
+    Some(a_t * aat_inv)
 }

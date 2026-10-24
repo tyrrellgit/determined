@@ -17,7 +17,7 @@ fn main() {
         Epoch::new(0)).ptr();
 
     // static target: x(t + 1) = x(t)
-    let transition = NonLinearTransition::<2>::new(
+    let transition = NonLinearTransitionN::<2>::new(
         state.clone(),
         Box::new(|state| state.value),
         Box::new(|_| na::SMatrix::<f64, 2, 2>::identity()),
@@ -25,7 +25,7 @@ fn main() {
     );
 
     // range sensor and its Jacobian
-    let measurement = NonLinearMeasurement::<2, 1>::new(
+    let measurement = NonLinearMeasurementNM::<2, 1>::new(
         Box::new(|state| na::SMatrix::<f64, 1, 1>::new(state.value.norm())),
         Box::new(|state| {
             let range = state.value.norm();
@@ -35,7 +35,7 @@ fn main() {
     );
 
     let mut filter = ExtendedKalmanFilterNM::new(
-        NonLinearUpdate::<2, 1>::new(measurement, transition));
+        NonLinearUpdateNM::<2, 1>::new(measurement, transition));
 
     for t in 1..=5 {
         let obs = Observation {
