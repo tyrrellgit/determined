@@ -8,6 +8,7 @@ pub mod update;
 pub mod algorithms;
 pub mod arrays;
 pub mod ekf;
+pub mod kalman;
 pub mod logging;
 
 use pyo3::prelude::*;
@@ -28,8 +29,9 @@ fn determined(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<update::PyUpdateModel>()?;
     
     // Algorithms
-    m.add_class::<algorithms::PyKalmanFilter>()?;
+    m.add_class::<kalman::PyKalmanFilter>()?;
     m.add_class::<ekf::PyExtendedKalmanFilter>()?;
+    m.add_class::<algorithms::PyCustomFilter>()?;
 
     Ok(())
 }

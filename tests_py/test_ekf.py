@@ -205,6 +205,47 @@ class TestExtendedKalmanFilter(unittest.TestCase):
             build(f=boom).predict(dt.Epoch(1))
 
 
+class TestCallbackSafety(unittest.TestCase):
+
+    def test_error_in_callback_leaves_state_unchanged(self):
+        calls = []
+
+        def f(x, t):
+            calls.append(t)
+            if t == 1:
+                raise RuntimeError("boom at t=1")
+            return x + 1.0
+
+        state = make_state([0.0])
+        ekf = dt.ExtendedKalmanFilter(
+            state, f=f, jac_f=lambda x, t: np.eye(1), q=np.eye(1),
+            h=lambda x, t: x, jac_h=lambda x, t: np.eye(1), r=np.eye(1))
+
+        with self.assertRaises(RuntimeError):
+            ekf.predict(dt.Epoch(3))      # fails on the second step
+
+        # nothing was half-applied, and no further steps ran after the error
+        np.testing.assert_array_equal(state.value, [0.0])
+        np.testing.assert_array_equal(state.covariance, np.eye(1))
+        self.assertEqual(state.epoch.value, 0)
+        self.assertEqual(calls, [0, 1])
+
+    def test_callback_may_read_the_state(self):
+        """Model functions run without the state lock held, so this must not deadlock."""
+        state = make_state([1.0, 2.0])
+        seen = []
+
+        def f(x, t):
+            seen.append(state.value.copy())
+            return x
+
+        ekf = dt.ExtendedKalmanFilter(
+            state, f=f, jac_f=lambda x, t: np.eye(2), q=np.eye(2),
+            h=lambda x, t: x, jac_h=lambda x, t: np.eye(2), r=np.eye(2))
+        ekf.predict(dt.Epoch(1))
+        np.testing.assert_array_equal(seen[0], [1.0, 2.0])
+
+
 class TestKeywordOnlyConstructors(unittest.TestCase):
 
     def test_positional_arguments_after_the_first_are_rejected(self):

@@ -72,3 +72,19 @@ impl PyState {
         Ok(format!("{:0.6}", self.inner.read().unwrap()))
     }
 }
+
+impl PyState {
+    /// Copy `other` into this state's storage, keeping this state's identity,
+    /// so everything sharing it (e.g. a filter) sees the new values.
+    pub fn assign(&self, other: &PyState) -> PyResult<()> {
+        // copy out first: `other` may share this state's lock
+        let incoming = other.inner.read().unwrap().clone();
+        let dim = self.inner.read().unwrap().dim();
+        if incoming.dim() != dim {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "state has dimension {}, expected {dim}", incoming.dim())));
+        }
+        *self.inner.write().unwrap() = incoming;
+        Ok(())
+    }
+}

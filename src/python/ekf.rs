@@ -1,8 +1,8 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-//! Python-facing Extended Kalman Filter.
+//! Python wrapper around the Rust Extended Kalman Filter (`ExtendedKalmanFilterDyn`).
 //!
-//! Unlike the type-erased `KalmanFilter` wrapper (where the Python object
+//! Unlike the type-erased `CustomFilter` wrapper (where the Python object
 //! implements the whole update), this filter does the EKF maths in Rust and
 //! only calls back into Python for the model functions. The callables take
 //! the state *value* as a numpy array and the epoch `t` as an int, and return
@@ -13,18 +13,29 @@
 //! the filter's internal state, not snapshots: they change on the next call.
 //! Copy the arrays (`state.value.copy()`) if you need to keep one.
 
+use std::sync::{ Arc, Mutex };
+
 use pyo3::prelude::*;
 use pyo3::exceptions::{ PyTypeError, PyValueError };
 use pyo3::types::{ PyAny, PyDict };
 use numpy::{ PyReadonlyArray2, PyReadonlyArrayDyn, ToPyArray };
 
 use crate::common::na;
-use crate::epoch::Epoch;
+use crate::algorithms::ExtendedKalmanFilterDyn;
+use crate::filter::Filter;
+use crate::models::{ NonLinearMeasurement, NonLinearTransition, NonLinearUpdate };
+use crate::state::State;
 
 use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
 use crate::python::measurement::PyObservation;
-use crate::python::arrays::to_dmatrix;
+use crate::python::arrays::{ to_dmatrix, check_square, check_length };
+
+/// First error raised by a Python model function during a filter call.
+///
+/// The Rust model closures cannot fail, so on error they record it here and
+/// return a placeholder; the wrapper then restores the state and raises.
+pub type ErrorSlot = Arc<Mutex<Option<PyErr>>>;
 
 /// Coerce anything array-like (numpy, jax, lists...) to a float64 ndarray.
 fn as_f64_array<'py>(py: Python<'py>, obj: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -34,20 +45,11 @@ fn as_f64_array<'py>(py: Python<'py>, obj: Bound<'py, PyAny>) -> PyResult<Bound<
     np.call_method("asarray", (obj,), Some(&kwargs))
 }
 
-fn check_callable(func: &Py<PyAny>, py: Python<'_>, name: &str) -> PyResult<()> {
+pub fn check_callable(func: &Py<PyAny>, py: Python<'_>, name: &str) -> PyResult<()> {
     if func.bind(py).is_callable() {
         Ok(())
     } else {
         Err(PyTypeError::new_err(format!("{name} must be callable")))
-    }
-}
-
-fn check_square(m: &na::DMatrix<f64>, dim: usize, name: &str) -> PyResult<()> {
-    if m.shape() == (dim, dim) {
-        Ok(())
-    } else {
-        Err(PyValueError::new_err(format!(
-            "{name} must have shape ({dim}, {dim}), got {:?}", m.shape())))
     }
 }
 
@@ -56,12 +58,11 @@ fn call_vector(
     py: Python<'_>,
     func: &Py<PyAny>,
     name: &str,
-    x: &na::DVector<f64>,
-    t: i64,
+    state: &State<na::Dyn>,
     len: usize,
 ) -> PyResult<na::DVector<f64>> {
-    let result = func.bind(py).call1((x.as_slice().to_pyarray(py), t))?;
-    let result = as_f64_array(py, result)?;
+    let x = state.value.as_slice().to_pyarray(py);
+    let result = as_f64_array(py, func.bind(py).call1((x, state.epoch.value))?)?;
     let array: PyReadonlyArrayDyn<f64> = result.extract()?;
     let view = array.as_array();
     if view.len() != len {
@@ -76,13 +77,12 @@ fn call_matrix(
     py: Python<'_>,
     func: &Py<PyAny>,
     name: &str,
-    x: &na::DVector<f64>,
-    t: i64,
+    state: &State<na::Dyn>,
     nrows: usize,
     ncols: usize,
 ) -> PyResult<na::DMatrix<f64>> {
-    let result = func.bind(py).call1((x.as_slice().to_pyarray(py), t))?;
-    let result = as_f64_array(py, result)?;
+    let x = state.value.as_slice().to_pyarray(py);
+    let result = as_f64_array(py, func.bind(py).call1((x, state.epoch.value))?)?;
     let array: PyReadonlyArray2<f64> = result.extract().map_err(|_| {
         PyValueError::new_err(format!("{name}() must return a 2D array"))
     })?;
@@ -93,67 +93,76 @@ fn call_matrix(
     Ok(to_dmatrix(array.as_array()))
 }
 
+/// Wrap a Python model function as a Rust model closure returning a vector.
+pub fn vector_model(
+    func: Py<PyAny>,
+    name: &'static str,
+    len: usize,
+    error: ErrorSlot,
+) -> impl Fn(&State<na::Dyn>) -> na::DVector<f64> + Send + Sync {
+    move |state| {
+        let placeholder = || na::DVector::<f64>::zeros(len);
+        if error.lock().unwrap().is_some() {
+            return placeholder();
+        }
+        Python::attach(|py| call_vector(py, &func, name, state, len))
+            .unwrap_or_else(|err| {
+                *error.lock().unwrap() = Some(err);
+                placeholder()
+            })
+    }
+}
+
+/// Wrap a Python model function as a Rust model closure returning a matrix.
+pub fn matrix_model(
+    func: Py<PyAny>,
+    name: &'static str,
+    nrows: usize,
+    ncols: usize,
+    error: ErrorSlot,
+) -> impl Fn(&State<na::Dyn>) -> na::DMatrix<f64> + Send + Sync {
+    move |state| {
+        let placeholder = || na::DMatrix::<f64>::zeros(nrows, ncols);
+        if error.lock().unwrap().is_some() {
+            return placeholder();
+        }
+        Python::attach(|py| call_matrix(py, &func, name, state, nrows, ncols))
+            .unwrap_or_else(|err| {
+                *error.lock().unwrap() = Some(err);
+                placeholder()
+            })
+    }
+}
+
 #[pyclass(name="ExtendedKalmanFilter")]
 pub struct PyExtendedKalmanFilter {
+    filter: ExtendedKalmanFilterDyn,
     state: PyState,
-    f: Py<PyAny>,
-    jac_f: Py<PyAny>,
-    h: Py<PyAny>,
-    jac_h: Py<PyAny>,
-    q: na::DMatrix<f64>,
-    r: na::DMatrix<f64>,
+    error: ErrorSlot,
 }
 
 impl PyExtendedKalmanFilter {
-    fn dim(&self) -> usize {
-        self.state.inner.read().unwrap().dim()
-    }
+    /// Run a filter operation; if a Python model function raised, restore
+    /// the state to what it was before and re-raise that error.
+    fn guarded<T>(&mut self, op: impl FnOnce(&mut ExtendedKalmanFilterDyn) -> T) -> PyResult<T> {
+        let backup = self.filter.state.read().unwrap().clone();
+        *self.error.lock().unwrap() = None;
 
-    /// Copy the state out so no lock is held while Python code runs.
-    fn snapshot(&self) -> (na::DVector<f64>, na::DMatrix<f64>, Epoch) {
-        let state = self.state.inner.read().unwrap();
-        (state.value.clone(), state.covariance(), state.epoch)
-    }
+        let result = op(&mut self.filter);
 
-    fn write_back(&self, value: na::DVector<f64>, cov: na::DMatrix<f64>, epoch: Epoch) {
-        let mut state = self.state.inner.write().unwrap();
-        state.value = value;
-        state.covariance = Some(cov);
-        state.epoch = epoch;
-    }
-
-    /// Advance the state one epoch at a time, as the Rust `NonLinearTransition`.
-    fn propagate(&self, py: Python<'_>, epoch: Epoch) -> PyResult<()> {
-        let n = self.dim();
-        let (mut x, mut p, mut current) = self.snapshot();
-
-        let delta = (epoch - current).value;
-        if delta == 0 {
-            return Ok(());
+        match self.error.lock().unwrap().take() {
+            Some(err) => {
+                *self.filter.state.write().unwrap() = backup;
+                Err(err)
+            }
+            None => Ok(result),
         }
-        if delta < 0 {
-            spdlog::warn!(
-                "Backward propagation is not supported for nonlinear transitions; state is unchanged."
-            );
-            return Ok(());
-        }
-
-        for _ in 0..delta {
-            let jac = call_matrix(py, &self.jac_f, "jac_f", &x, current.value, n, n)?;
-            let next = call_vector(py, &self.f, "f", &x, current.value, n)?;
-            p = &jac * &p * jac.transpose() + &self.q;
-            x = next;
-            current = current + Epoch::new(1);
-        }
-
-        self.write_back(x, p, current);
-        Ok(())
     }
 }
 
 #[pymethods]
 impl PyExtendedKalmanFilter {
-    /// ExtendedKalmanFilter(state, f, jac_f, q, h, jac_h, r)
+    /// ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
     ///
     /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
     /// jac_f(x, t) -> F  Jacobian of f, shape (N, N)
@@ -182,86 +191,50 @@ impl PyExtendedKalmanFilter {
         let q = to_dmatrix(q.as_array());
         let r = to_dmatrix(r.as_array());
         let n = state.inner.read().unwrap().dim();
+        let m = r.nrows();
         check_square(&q, n, "q")?;
-        if r.nrows() != r.ncols() {
-            return Err(PyValueError::new_err(format!(
-                "r must be square, got {:?}", r.shape())));
-        }
+        check_square(&r, m, "r")?;
 
-        Ok(PyExtendedKalmanFilter { state, f, jac_f, h, jac_h, q, r })
+        let error = ErrorSlot::default();
+        let transition = NonLinearTransition::new(
+            state.inner.clone(),
+            Box::new(vector_model(f, "f", n, error.clone())),
+            Box::new(matrix_model(jac_f, "jac_f", n, n, error.clone())),
+            q,
+        );
+        let measurement = NonLinearMeasurement::new(
+            Box::new(vector_model(h, "h", m, error.clone())),
+            Box::new(matrix_model(jac_h, "jac_h", m, n, error.clone())),
+            r,
+        );
+        let filter = ExtendedKalmanFilterDyn::new(NonLinearUpdate::new(measurement, transition));
+
+        Ok(PyExtendedKalmanFilter { filter, state, error })
     }
 
-    fn predict(&self, py: Python<'_>, epoch: &PyEpoch) -> PyResult<PyState> {
-        self.propagate(py, epoch.inner)?;
-        Ok(PyState { inner: self.state.inner.clone() })
+    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
+        let inner = self.guarded(|filter| filter.predict(&epoch.inner))?;
+        Ok(PyState { inner })
     }
 
-    fn update(&self, py: Python<'_>, observation: &PyObservation) -> PyResult<PyState> {
-        let n = self.dim();
-        let m = self.r.nrows();
-
-        let z = &observation.inner.value;
-        if z.len() != m {
-            return Err(PyValueError::new_err(format!(
-                "observation has {} elements, expected {m}", z.len())));
-        }
-
-        // propagate state to observation epoch
-        self.propagate(py, observation.inner.epoch)?;
-        let (x, p, epoch) = self.snapshot();
-
-        // project the state to the measurement domain, linearised about it
-        let z_x = call_vector(py, &self.h, "h", &x, epoch.value, m)?;
-        let h = call_matrix(py, &self.jac_h, "jac_h", &x, epoch.value, m, n)?;
-
-        // innovation covariance and gain
-        let h_t = h.transpose();
-        let s = &h * &p * &h_t + &self.r;
-        let s_inv = match s.try_inverse() {
-            Some(s_inv) => s_inv,
-            None => {
-                spdlog::error!(
-                    "Invalid update: Innovation covariance S is singular; state will not be updated."
-                );
-                return Ok(PyState { inner: self.state.inner.clone() });
-            }
-        };
-        let k = &p * &h_t * s_inv;
-
-        let value = &x + &k * (z - z_x);
-
-        // Joseph form: stays symmetric positive semi-definite under rounding
-        let i_kh = na::DMatrix::<f64>::identity(n, n) - &k * &h;
-        let cov = &i_kh * &p * i_kh.transpose() + &k * &self.r * k.transpose();
-
-        self.write_back(value, cov, epoch);
-        Ok(PyState { inner: self.state.inner.clone() })
+    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
+        check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
+        let inner = self.guarded(|filter| filter.update(&observation.inner))?;
+        Ok(PyState { inner })
     }
 
     #[getter]
     fn get_state(&self) -> PyState {
-        PyState { inner: self.state.inner.clone() }
+        PyState { inner: self.filter.state() }
     }
 
     #[setter]
     fn set_state(&self, state: PyState) -> PyResult<()> {
-        let incoming = state.inner.read().unwrap();
-        if incoming.dim() != self.dim() {
-            return Err(PyValueError::new_err(format!(
-                "state has dimension {}, expected {}", incoming.dim(), self.dim())));
-        }
-        let mut inner = self.state.inner.write().unwrap();
-        inner.value = incoming.value.clone();
-        inner.covariance = incoming.covariance.clone();
-        inner.epoch = incoming.epoch;
-        Ok(())
+        self.state.assign(&state)
     }
 
     /// Zero the state and reset the covariance to identity.
-    fn reset(&self) {
-        let mut state = self.state.inner.write().unwrap();
-        let n = state.dim();
-        state.value.fill(0.0);
-        state.covariance = Some(na::DMatrix::<f64>::identity(n, n));
+    fn reset(&mut self) {
+        self.filter.reset();
     }
 }

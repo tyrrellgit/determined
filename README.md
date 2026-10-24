@@ -7,7 +7,8 @@ This crate implements small Kalman and Extended Kalman Filters on nalgebra
 matrices. The models are generic over the dimension type, so the same
 implementation serves statically sized matrices (`KalmanFilterNM<N, M>`,
 `LinearUpdateNM<N, M>`, ... for predictable, allocation-free linear algebra)
-and runtime sized ones (`KalmanFilterDyn`, `ExtendedKalmanFilterDyn`).
+and runtime sized ones (`KalmanFilterDyn`, `ExtendedKalmanFilterDyn`), which
+the Python bindings wrap.
 
 Generate API documentation locally with:
 
@@ -44,6 +45,20 @@ pip install .                  # builds and installs a wheel (needs a Rust toolc
 
 Then `import determined as dt`.
 
+Three filters are available from Python:
+
+| Class | Models | Maths runs in |
+|---|---|---|
+| `dt.KalmanFilter(state, *, f, q, h, r)` | numpy matrices | Rust only |
+| `dt.ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)` | Python functions | Rust, calling back into Python for the model functions |
+| `dt.CustomFilter(update)` | a Python `UpdateModel` you implement | Python (the filter only delegates `predict`/`update`) |
+
+```python
+kf = dt.KalmanFilter(state, f=F, q=Q, h=H, r=R)
+kf.predict(dt.Epoch(1))
+kf.update(dt.Observation(z, epoch=dt.Epoch(1)))
+```
+
 `dt.ExtendedKalmanFilter` runs the filter maths in Rust and calls back into Python for the model:
 
 ```python
@@ -53,6 +68,9 @@ ekf.update(dt.Observation(z, epoch=dt.Epoch(1)))
 ```
 
 - **Model functions** are `f(x, t)`, `jac_f(x, t)`, `h(x, t)` and `jac_h(x, t)`. `x` is the state value (a numpy array) and `t` the integer epoch: `f` advances the state from epoch `t` to `t + 1`, and `h` is evaluated at the measurement epoch. They may be time-varying, and may return anything array-like, so Jacobians can come from an autodiff library (e.g. `jax.jacfwd`, which differentiates `x` and not `t`).
+- **Same implementation as Rust:** `KalmanFilter` and `ExtendedKalmanFilter` wrap the crate's `KalmanFilterDyn` and `ExtendedKalmanFilterDyn`, so they behave exactly like the Rust filters.
+- **Epochs:** both filters advance the state one epoch at a time and do nothing when asked for the current epoch. Predicting backwards uses `F⁻¹` for `KalmanFilter`; `ExtendedKalmanFilter` logs a warning and leaves the state unchanged.
+- **Errors in model functions:** if `f`, `h` or a Jacobian raises (or returns the wrong shape), the exception propagates and the filter state is left as it was before the call.
 - **Keyword-only arguments:** constructors take their first argument positionally and the rest by keyword, e.g. `dt.State(value, covariance=cov, epoch=epoch)`.
 - **States are live views.** To avoid copying, the `State` returned by `predict`, `update` and `.state` shares memory with the filter's internal state, so it changes on the next call (and is the same object you passed in). Copy the arrays (`state.value.copy()`) if you need to keep a snapshot.
 - **Logging:** messages from the Rust side go through Python's `logging` under the name `determined`, e.g. `logging.getLogger("determined").setLevel(logging.DEBUG)`.

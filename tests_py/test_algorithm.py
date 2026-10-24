@@ -43,7 +43,7 @@ class TestAlgorithm(unittest.TestCase):
         self.update = dt.UpdateModel(self.u, transition=self.transition, measurement=self.measurement)
 
         # this is basically just a type-erased wrapper
-        self.algorithm = dt.KalmanFilter(self.update)
+        self.algorithm = dt.CustomFilter(self.update)
         return super().setUp()
     
     def test_predict(self):

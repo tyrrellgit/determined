@@ -3,7 +3,7 @@ Manim scene for the two-mass-spring-damper system.
 
 This scene runs the same simulation as the Python example but renders a
 textbook-style diagram: two masses as boxes and springs as zig-zag lines.
-It uses the Rust `PyKalmanFilter` (PyO3) to compute the filter estimates.
+The filter estimates are computed in Rust by `determined.KalmanFilter`.
 
 Run (recommended, low-quality preview):
   pip install manim  # community edition
@@ -24,10 +24,6 @@ from manim import (
 )
 
 import determined as dt
-
-from transition import LinearTransition
-from measurement import LinearMeasurement
-from update import LinearUpdate
 
 
 def setup_two_mass_spring_damper_params():
@@ -54,9 +50,6 @@ def setup_two_mass_spring_damper_params():
     sigma_q = np.diag([0.3 * _dt, 0.05 * _dt, 0.3 * _dt, 0.05 * _dt])
     q = sigma_q @ sigma_q.T
 
-    transition_model = LinearTransition(f, q, initial_state)
-    transition = dt.TransitionModel(transition_model, state=initial_state) 
-    
     # measurement model
     h = np.array([
         [1.0, 0.0, 0.0, 0.0],
@@ -66,15 +59,8 @@ def setup_two_mass_spring_damper_params():
     sigma_r = np.diag([0.1, 0.1])
     r = sigma_r @ sigma_r.T
 
-    measurement_model = LinearMeasurement(h, r)
-    measurement = dt.MeasurementModel(measurement_model)
-
-    # update model
-    update_model = LinearUpdate(transition, measurement)
-    update = dt.UpdateModel(update_model, transition=transition, measurement=measurement)
-
     # filter
-    kf = dt.KalmanFilter(update)
+    kf = dt.KalmanFilter(initial_state, f=f, q=q, h=h, r=r)
 
     # system models
     process_noise=0.00,

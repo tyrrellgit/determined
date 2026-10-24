@@ -10,7 +10,7 @@ epoch = dt.Epoch(0)
 state = dt.State(value, covariance=np.eye(value.size), epoch=epoch)
 obs = dt.Observation(np.array([0.0, 1.0]), epoch=epoch)
 
-filter = dt.KalmanFilter(update)
+filter = dt.CustomFilter(update)
 
 if __name__ == "__main__":
 

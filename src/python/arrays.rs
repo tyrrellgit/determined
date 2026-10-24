@@ -24,3 +24,27 @@ pub fn to_pymatrix<'py>(py: Python<'py>, matrix: &na::DMatrix<f64>) -> PyMatrix<
         .reshape([matrix.nrows(), matrix.ncols()])
         .unwrap()
 }
+
+/// Check a matrix has the given shape, for validating Python inputs before
+/// they reach nalgebra (which panics on mismatched dimensions).
+pub fn check_shape(m: &na::DMatrix<f64>, shape: (usize, usize), name: &str) -> PyResult<()> {
+    if m.shape() == shape {
+        Ok(())
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} must have shape {shape:?}, got {:?}", m.shape())))
+    }
+}
+
+pub fn check_square(m: &na::DMatrix<f64>, dim: usize, name: &str) -> PyResult<()> {
+    check_shape(m, (dim, dim), name)
+}
+
+pub fn check_length(v: &na::DVector<f64>, len: usize, name: &str) -> PyResult<()> {
+    if v.len() == len {
+        Ok(())
+    } else {
+        Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} has {} elements, expected {len}", v.len())))
+    }
+}
