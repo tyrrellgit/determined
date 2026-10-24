@@ -8,8 +8,8 @@ use crate::common::Epoch;
 #[test]
 fn test_kalman_update_scalar() {
     // Small 1D Kalman filter: N=1, M=1
-    // bring Algorithm trait into scope so we can call the trait-associated `new`
-    let mut filter = <KalmanFilter::<1, 1> as Filter>::new();
+    // bring Filter trait into scope so we can call the trait-associated `new`
+    let mut filter = KalmanFilter::<1, 1>::new();
 
     // initial state x = 0
     assert_eq!(filter.x.value[(0, 0)], 0.0);
@@ -38,7 +38,7 @@ fn test_kalman_update_scalar() {
 #[test]
 fn test_kalman_update_2d() {
     // N=2, M=1. Observe only the first state element.
-    let mut filter = <KalmanFilter::<2, 1> as Filter>::new();
+    let mut filter = KalmanFilter::<2, 1>::new();
     // set H = [1 0]
     filter.h = na::SMatrix::<f64, 1, 2>::from_row_slice(&[1.0, 0.0]);
 
@@ -59,7 +59,7 @@ fn test_kalman_update_2d() {
 #[should_panic(expected = "innovation covariance S is singular")]
 fn test_kalman_singular_innovation() {
     // Construct filter where p and r are zero so S == 0 and inverse fails.
-    let mut filter = <KalmanFilter::<1, 1> as Filter>::new();
+    let mut filter = KalmanFilter::<1, 1>::new();
     filter.p = na::SMatrix::<f64, 1, 1>::zeros();
     filter.r = na::SMatrix::<f64, 1, 1>::zeros();
     filter.h = na::SMatrix::<f64, 1, 1>::identity();

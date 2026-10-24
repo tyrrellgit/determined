@@ -5,7 +5,7 @@ use determined::common::Epoch;
 
 #[test]
 fn test_kalman_filter() {
-    let mut kf: KalmanFilter::<1, 1> = KalmanFilter::new();
+    let mut kf = KalmanFilter::<1, 1>::new();
     // make sure measurement mapping is set
     kf.h = determined::common::na::SMatrix::<f64, 1, 1>::identity();
 

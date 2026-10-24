@@ -23,17 +23,8 @@ pub struct KalmanFilter<const N: usize, const M: usize> {
 }
 
 impl<const N: usize, const M: usize> KalmanFilter<N, M> {
-    pub fn builder() -> Self {
-        // convenience builder -> default values
-        KalmanFilter::new()
-    }
-}
 
-impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
-    type StateType = State<N, 1>;
-    type ObservationType = State<M, 1>;
-
-    fn new() -> Self {
+    pub fn new() -> Self {
         KalmanFilter {
             x: State::new(0.0, 0),
             p: na::SMatrix::<f64, N, N>::identity(),
@@ -43,6 +34,16 @@ impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
             r: na::SMatrix::<f64, M, M>::identity(),
         }
     }
+
+    pub fn builder() -> Self {
+        // convenience builder -> default values
+        KalmanFilter::new()
+    }
+}
+
+impl<const N: usize, const M: usize> Filter for KalmanFilter<N, M> {
+    type StateType = State<N, 1>;
+    type ObservationType = State<M, 1>;
 
     fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
         self.x.value = &self.f * &self.x.value;
@@ -116,13 +117,6 @@ where
 {
     type StateType = State<N, 1>;
     type ObservationType = State<M, 1>;
-
-    fn new() -> Self
-    where
-        Self: Sized,
-    {
-        Ekf::new(T::default(), U::default())
-    }
 
     fn predict<'a>(&'a mut self, _epoch: &Epoch) -> &'a Self::StateType {
         let x_pred = self.transition.f(&self.x.value, None);
