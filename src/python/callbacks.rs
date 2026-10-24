@@ -13,7 +13,7 @@ use pyo3::types::{ PyAny, PyDict };
 use numpy::{ PyReadonlyArray2, PyReadonlyArrayDyn, ToPyArray };
 
 use crate::common::na;
-use crate::state::State;
+use crate::state::{ State, StatePtr };
 
 use crate::python::arrays::to_dmatrix;
 
@@ -117,5 +117,28 @@ pub fn matrix_model(
                 *error.lock().unwrap() = Some(err);
                 placeholder()
             })
+    }
+}
+
+/// Run a filter operation whose models call back into Python. If a Python
+/// model function raised (or returned the wrong shape), restore `state` to
+/// what it was before the call and re-raise that error.
+pub fn guarded<F, T>(
+    filter: &mut F,
+    state: &StatePtr<na::Dyn>,
+    error: &ErrorSlot,
+    op: impl FnOnce(&mut F) -> T,
+) -> PyResult<T> {
+    let backup = state.read().unwrap().clone();
+    *error.lock().unwrap() = None;
+
+    let result = op(filter);
+
+    match error.lock().unwrap().take() {
+        Some(err) => {
+            *state.write().unwrap() = backup;
+            Err(err)
+        }
+        None => Ok(result),
     }
 }

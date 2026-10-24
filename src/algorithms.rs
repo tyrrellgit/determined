@@ -15,7 +15,7 @@ use crate::epoch::Epoch;
 use crate::filter::Filter;
 use crate::models::{
     UpdateModel,
-    LinearUpdate, NonLinearUpdate,
+    LinearUpdate, NonLinearUpdate, UnscentedUpdate,
     DefaultFromState
 };
 
@@ -128,3 +128,14 @@ pub type ExtendedKalmanFilterNM<const N: usize, const M: usize> =
 /// Extended Kalman Filter with runtime sized state and measurement
 pub type ExtendedKalmanFilterDyn =
     KalmanFilterT<na::Dyn, na::Dyn, NonLinearUpdate<na::Dyn, na::Dyn>>;
+
+/// Unscented Kalman Filter
+pub type UnscentedKalmanFilterNM<const N: usize, const M: usize> =
+    KalmanFilterT<
+        na::Const<N>, na::Const<M>,
+        UnscentedUpdate<na::Const<N>, na::Const<M>>
+    >;
+
+/// Unscented Kalman Filter with runtime sized state and measurement
+pub type UnscentedKalmanFilterDyn =
+    KalmanFilterT<na::Dyn, na::Dyn, UnscentedUpdate<na::Dyn, na::Dyn>>;

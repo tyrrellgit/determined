@@ -45,12 +45,13 @@ pip install .                  # builds and installs a wheel (needs a Rust toolc
 
 Then `import determined as dt`.
 
-Three filters are available from Python:
+Four filters are available from Python:
 
 | Class | Models | Maths runs in |
 |---|---|---|
 | `dt.KalmanFilter(state, *, f, q, h, r)` | numpy matrices | Rust only |
 | `dt.ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)` | Python functions | Rust, calling back into Python for the model functions |
+| `dt.UnscentedKalmanFilter(state, *, f, q, h, r, alpha=1, beta=2, kappa=0)` | Python functions, no Jacobians | Rust, calling back into Python for the model functions |
 | `dt.CustomFilter(update)` | a Python `UpdateModel` you implement | Python (the filter only delegates `predict`/`update`) |
 
 ```python
@@ -68,8 +69,9 @@ ekf.update(dt.Observation(z, epoch=dt.Epoch(1)))
 ```
 
 - **Model functions** are `f(x, t)`, `jac_f(x, t)`, `h(x, t)` and `jac_h(x, t)`. `x` is the state value (a numpy array) and `t` the integer epoch: `f` advances the state from epoch `t` to `t + 1`, and `h` is evaluated at the measurement epoch. They may be time-varying, and may return anything array-like, so Jacobians can come from an autodiff library (e.g. `jax.jacfwd`, which differentiates `x` and not `t`).
-- **Same implementation as Rust:** `KalmanFilter` and `ExtendedKalmanFilter` wrap the crate's `KalmanFilterDyn` and `ExtendedKalmanFilterDyn`, so they behave exactly like the Rust filters.
-- **Epochs:** both filters advance the state one epoch at a time and do nothing when asked for the current epoch. Predicting backwards uses `F⁻¹` for `KalmanFilter`; `ExtendedKalmanFilter` logs a warning and leaves the state unchanged.
+- **Same implementation as Rust:** `KalmanFilter`, `ExtendedKalmanFilter` and `UnscentedKalmanFilter` wrap the crate's `KalmanFilterDyn`, `ExtendedKalmanFilterDyn` and `UnscentedKalmanFilterDyn`, so they behave exactly like the Rust filters.
+- **Unscented filter:** `f` and `h` are evaluated at 2N + 1 sigma points per step (van der Merwe scaled points), so they must not keep state between calls. The default `alpha=1, beta=2, kappa=0` keeps all sigma point weights non-negative; a very small `alpha` (e.g. `1e-3`) gives a large negative centre weight and is numerically fragile.
+- **Epochs:** both filters advance the state one epoch at a time and do nothing when asked for the current epoch. Predicting backwards uses `F⁻¹` for `KalmanFilter`; the extended and unscented filters log a warning and leave the state unchanged.
 - **Errors in model functions:** if `f`, `h` or a Jacobian raises (or returns the wrong shape), the exception propagates and the filter state is left as it was before the call.
 - **Keyword-only arguments:** constructors take their first argument positionally and the rest by keyword, e.g. `dt.State(value, covariance=cov, epoch=epoch)`.
 - **States are live views.** To avoid copying, the `State` returned by `predict`, `update` and `.state` shares memory with the filter's internal state, so it changes on the next call (and is the same object you passed in). Copy the arrays (`state.value.copy()`) if you need to keep a snapshot.

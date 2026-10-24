@@ -6,11 +6,12 @@
 //! |------------------------------------------|------------------------|
 //! | `KalmanFilterDyn`                        | `KalmanFilter`         |
 //! | `ExtendedKalmanFilterDyn`                | `ExtendedKalmanFilter` |
+//! | `UnscentedKalmanFilterDyn`               | `UnscentedKalmanFilter`|
 //! | `KalmanFilterT<Dyn, Dyn, PyUpdateModel>` | `CustomFilter`         |
 //!
 //! `KalmanFilter` is computed entirely in Rust from numpy matrices.
-//! `ExtendedKalmanFilter` does the maths in Rust and calls back into Python
-//! only for the model functions (see `callbacks`). `CustomFilter` runs
+//! `ExtendedKalmanFilter` and `UnscentedKalmanFilter` do the maths in Rust and
+//! call back into Python only for the model functions (see `callbacks`). `CustomFilter` runs
 //! whatever update your Python `UpdateModel` implements.
 //!
 //! States returned by `predict`/`update`/`state` are live, zero-copy views of
@@ -21,11 +22,12 @@ use pyo3::prelude::*;
 use numpy::PyReadonlyArray2;
 
 use crate::common::na;
-use crate::algorithms::{ KalmanFilterT, KalmanFilterDyn, ExtendedKalmanFilterDyn };
+use crate::algorithms::{ KalmanFilterT, KalmanFilterDyn, ExtendedKalmanFilterDyn, UnscentedKalmanFilterDyn };
 use crate::filter::Filter;
 use crate::models::{
     LinearMeasurement, LinearTransition, LinearUpdate,
     NonLinearMeasurement, NonLinearTransition, NonLinearUpdate,
+    UnscentedMeasurement, UnscentedTransition, UnscentedUpdate, UnscentedParams,
 };
 
 use crate::python::epoch::PyEpoch;
@@ -33,7 +35,7 @@ use crate::python::state::PyState;
 use crate::python::measurement::PyObservation;
 use crate::python::models::PyUpdateModel;
 use crate::python::arrays::{ to_dmatrix, check_shape, check_square, check_length };
-use crate::python::callbacks::{ ErrorSlot, check_callable, vector_model, matrix_model };
+use crate::python::callbacks::{ ErrorSlot, check_callable, guarded, vector_model, matrix_model };
 
 
 // Kalman Filter
@@ -114,25 +116,6 @@ pub struct PyExtendedKalmanFilter {
     error: ErrorSlot,
 }
 
-impl PyExtendedKalmanFilter {
-    /// Run a filter operation; if a Python model function raised, restore
-    /// the state to what it was before and re-raise that error.
-    fn guarded<T>(&mut self, op: impl FnOnce(&mut ExtendedKalmanFilterDyn) -> T) -> PyResult<T> {
-        let backup = self.filter.state.read().unwrap().clone();
-        *self.error.lock().unwrap() = None;
-
-        let result = op(&mut self.filter);
-
-        match self.error.lock().unwrap().take() {
-            Some(err) => {
-                *self.filter.state.write().unwrap() = backup;
-                Err(err)
-            }
-            None => Ok(result),
-        }
-    }
-}
-
 #[pymethods]
 impl PyExtendedKalmanFilter {
     /// ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
@@ -186,13 +169,107 @@ impl PyExtendedKalmanFilter {
     }
 
     fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
-        let inner = self.guarded(|filter| filter.predict(&epoch.inner))?;
+        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
+            |filter| filter.predict(&epoch.inner))?;
         Ok(PyState { inner })
     }
 
     fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
         check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
-        let inner = self.guarded(|filter| filter.update(&observation.inner))?;
+        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
+            |filter| filter.update(&observation.inner))?;
+        Ok(PyState { inner })
+    }
+
+    #[getter]
+    fn get_state(&self) -> PyState {
+        PyState { inner: self.filter.state() }
+    }
+
+    #[setter]
+    fn set_state(&self, state: PyState) -> PyResult<()> {
+        self.state.assign(&state)
+    }
+
+    /// Zero the state and reset the covariance to identity.
+    fn reset(&mut self) {
+        self.filter.reset();
+    }
+}
+
+
+// Unscented Kalman Filter
+#[pyclass(name="UnscentedKalmanFilter")]
+pub struct PyUnscentedKalmanFilter {
+    filter: UnscentedKalmanFilterDyn,
+    state: PyState,
+    error: ErrorSlot,
+}
+
+#[pymethods]
+impl PyUnscentedKalmanFilter {
+    /// UnscentedKalmanFilter(state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0)
+    ///
+    /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
+    /// h(x, t) -> z      measurement function at epoch t, shape (M,)
+    /// q, r              process (N, N) and measurement (M, M) noise
+    /// alpha, beta, kappa  scaled sigma point parameters (van der Merwe)
+    ///
+    /// No Jacobians are needed: `f` and `h` are evaluated at 2N + 1 sigma
+    /// points per step, so they must not keep state between calls. The
+    /// default parameters keep all sigma point weights non-negative.
+    ///
+    /// `t` is the integer epoch value. All arguments after `state` are
+    /// keyword-only. The returned states are live views of the filter state.
+    #[new]
+    #[pyo3(signature = (state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0))]
+    fn new(
+        py: Python<'_>,
+        state: PyState,
+        f: Py<PyAny>,
+        q: PyReadonlyArray2<f64>,
+        h: Py<PyAny>,
+        r: PyReadonlyArray2<f64>,
+        alpha: f64,
+        beta: f64,
+        kappa: f64,
+    ) -> PyResult<Self> {
+        for (func, name) in [(&f, "f"), (&h, "h")] {
+            check_callable(func, py, name)?;
+        }
+
+        let q = to_dmatrix(q.as_array());
+        let r = to_dmatrix(r.as_array());
+        let n = state.inner.read().unwrap().dim();
+        let m = r.nrows();
+        check_square(&q, n, "q")?;
+        check_square(&r, m, "r")?;
+
+        let error = ErrorSlot::default();
+        let transition = UnscentedTransition::new(
+            state.inner.clone(),
+            Box::new(vector_model(f, "f", n, error.clone())),
+            q,
+        ).with_params(UnscentedParams { alpha, beta, kappa });
+        let measurement = UnscentedMeasurement::new(
+            Box::new(vector_model(h, "h", m, error.clone())),
+            r,
+        );
+        let filter = UnscentedKalmanFilterDyn::new(UnscentedUpdate::new(measurement, transition));
+
+        Ok(PyUnscentedKalmanFilter { filter, state, error })
+    }
+
+    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
+        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
+            |filter| filter.predict(&epoch.inner))?;
+        Ok(PyState { inner })
+    }
+
+    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
+        check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
+        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
+            |filter| filter.update(&observation.inner))?;
         Ok(PyState { inner })
     }
 
