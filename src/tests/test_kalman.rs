@@ -92,6 +92,7 @@ fn test_moore_penrose_inverse_by_shape() {
 /// With a non-invertible F, backward prediction leaves the state unchanged.
 #[test]
 fn test_backward_predict_with_singular_transition() {
+    let _quiet = crate::tests::expect_logs();
     let state = State::<na::Const<2>>::new(vec![1.0, 2.0], vec![vec![1.0, 0.0], vec![0.0, 1.0]], Epoch::new(0));
     let mut filter = KalmanFilterNM::new(LinearUpdateNM::<2, 2>::new(
         LinearMeasurementNM::<2, 2>::new(na::SMatrix::identity(), na::SMatrix::identity()),

@@ -127,6 +127,7 @@ fn test_unscented_dyn_matches_static() {
 /// not positive definite leave the state unchanged.
 #[test]
 fn test_unscented_edge_cases() {
+    // let _quiet = crate::tests::expect_logs();
     let mut transition = UnscentedTransitionN::<2>::new(
         state2([1.0, 1.0], 1.0).ptr(), Box::new(|s| s.value * 2.0), na::SMatrix::<f64, 2, 2>::zeros());
 

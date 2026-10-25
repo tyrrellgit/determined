@@ -188,6 +188,7 @@ fn test_ud_dyn_matches_static() {
 /// innovation leave the state unchanged.
 #[test]
 fn test_ud_edge_cases() {
+    let _quiet = crate::tests::expect_logs();
     let mut ud = UDKalmanFilterNM::new(LinearUDUpdateNM::<3, 2>::new(
         LinearMeasurementNM::<3, 2>::new(na::SMatrix::<f64, 2, 3>::zeros(), na::SMatrix::<f64, 2, 2>::zeros()),
         LinearTransitionN::<3>::new(state3().ptr(), na::SMatrix::<f64, 3, 3>::identity() * 2.0,
