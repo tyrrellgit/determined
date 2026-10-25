@@ -204,3 +204,24 @@ fn test_ud_edge_cases() {
     let state = ud.update(&Observation { value: na::SVector::<f64, 2>::new(1.0, 1.0), epoch: Epoch::new(0) });
     assert_eq!(state.read().unwrap().value, before.value);
 }
+
+/// A perfect measurement (R = 0) of a state the first factor column does not
+/// see is handled like the Kalman filter, not rejected.
+#[test]
+fn test_ud_perfect_measurement() {
+    let h = na::SMatrix::<f64, 1, 2>::new(0.0, 1.0);
+    let r = na::SMatrix::<f64, 1, 1>::zeros();
+    let state = || State::<na::Const<2>>::new(vec![0.0, 0.0], vec![vec![1.0, 0.0], vec![0.0, 1.0]], Epoch::new(0));
+    let mut kf = KalmanFilterNM::new(LinearUpdateNM::<2, 1>::new(LinearMeasurementNM::<2, 1>::new(h, r),
+        LinearTransitionN::<2>::new(state().ptr(), na::SMatrix::identity(), na::SMatrix::zeros())));
+    let mut ud = UDKalmanFilterNM::new(LinearUDUpdateNM::<2, 1>::new(LinearMeasurementNM::<2, 1>::new(h, r),
+        LinearTransitionN::<2>::new(state().ptr(), na::SMatrix::identity(), na::SMatrix::zeros())));
+
+    let obs = Observation { value: na::SVector::<f64, 1>::new(2.0), epoch: Epoch::new(0) };
+    let a = kf.update(&obs);
+    let b = ud.update(&obs);
+    let (a, b) = (a.read().unwrap(), b.read().unwrap());
+    assert!(close(&b.value, &a.value), "{} vs {}", b.value, a.value);
+    assert!(close(&b.covariance(), &a.covariance()), "{} vs {}", b.covariance(), a.covariance());
+    assert!(ud.update.factors.d.iter().all(|d| d.is_finite() && *d >= 0.0));
+}

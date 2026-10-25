@@ -70,3 +70,37 @@ fn test_kalman_custom() {
     let _ = filter.update(&obs);
 
 }
+/// The pseudo-inverse is chosen by shape, so a wide H gets the right inverse
+/// (H H+ = I) and a tall H the left inverse (H+ H = I).
+#[test]
+fn test_moore_penrose_inverse_by_shape() {
+    use crate::common::linalg::moore_penrose_inverse;
+
+    // det(H^T H) of this wide H rounds to a tiny non-zero value
+    let wide = na::SMatrix::<f64, 1, 2>::new(0.7, 0.9);
+    let wide_inv = moore_penrose_inverse(&wide).unwrap();
+    assert!(((wide * wide_inv)[(0, 0)] - 1.0).abs() < 1e-12, "H H+ = {}", wide * wide_inv);
+
+    let tall = wide.transpose();
+    let tall_inv = moore_penrose_inverse(&tall).unwrap();
+    assert!(((tall_inv * tall)[(0, 0)] - 1.0).abs() < 1e-12, "H+ H = {}", tall_inv * tall);
+
+    // rank deficient
+    assert!(moore_penrose_inverse(&na::SMatrix::<f64, 1, 2>::zeros()).is_none());
+}
+
+/// With a non-invertible F, backward prediction leaves the state unchanged.
+#[test]
+fn test_backward_predict_with_singular_transition() {
+    let state = State::<na::Const<2>>::new(vec![1.0, 2.0], vec![vec![1.0, 0.0], vec![0.0, 1.0]], Epoch::new(0));
+    let mut filter = KalmanFilterNM::new(LinearUpdateNM::<2, 2>::new(
+        LinearMeasurementNM::<2, 2>::new(na::SMatrix::identity(), na::SMatrix::identity()),
+        LinearTransitionN::<2>::new(state.ptr(), na::SMatrix::<f64, 2, 2>::new(1.0, 0.0, 0.0, 0.0),
+            na::SMatrix::identity())));
+
+    let forward = filter.predict(&Epoch::new(2)).read().unwrap().clone();
+    let backward = filter.predict(&Epoch::new(0)).read().unwrap().clone();
+    assert_eq!(backward.value, forward.value);
+    assert_eq!(backward.covariance(), forward.covariance());
+    assert_eq!(backward.epoch, Epoch::new(2));
+}

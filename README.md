@@ -80,7 +80,7 @@ ekf.update(dt.Observation(z, epoch=dt.Epoch(1)))
 - **States are live views.** To avoid copying, the `State` returned by `predict`, `update` and `.state` shares memory with the filter's internal state, so it changes on the next call (and is the same object you passed in). Copy the arrays (`state.value.copy()`) if you need to keep a snapshot.
 - **Logging:** messages from the Rust side go through Python's `logging` under the name `determined`, e.g. `logging.getLogger("determined").setLevel(logging.DEBUG)`.
 
-See `examples/ekf.py`. Build a distributable wheel with `maturin build --release`.
+See `examples/ekf.py`, `examples/ukf.py` and `examples/ud.py` (Rust equivalents: `simple_ekf.rs`, `simple_ukf.rs`, `simple_ud.rs`). Build a distributable wheel with `maturin build --release`.
 
 ## Examples
 <img src="docs/assets/TwoMassSpringDamperScene_ManimCE_v0.19.1.gif" alt="spring damper example"/>

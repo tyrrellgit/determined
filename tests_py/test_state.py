@@ -17,3 +17,11 @@ class TestState(unittest.TestCase):
         state = dt.State(value, covariance=cov, epoch=epoch)
         
         np.testing.assert_array_equal(value, state.value, "state value arrays not equal")
+
+    def test_covariance_shape_is_checked(self):
+        with self.assertRaises(ValueError):
+            dt.State(np.zeros(2), covariance=np.eye(3), epoch=dt.Epoch(0))
+        with self.assertRaises(ValueError):
+            dt.State(np.zeros(2), covariance=np.ones((2, 3)), epoch=dt.Epoch(0))
+        # no covariance is still allowed
+        dt.State(np.zeros(2), covariance=None, epoch=dt.Epoch(0))
