@@ -16,8 +16,8 @@ where
     na::DefaultAllocator:
         na::base::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
 {
-    pub value: na::Matrix<f64, T, na::U1, na::Owned<f64, T, na::U1>>,
-    pub covariance: Option<na::Matrix<f64, T, T, na::Owned<f64, T, T>>>,
+    pub value: na::OVector<f64, T>,
+    pub covariance: Option<na::OMatrix<f64, T, T>>,
     pub epoch: Epoch,
 }
 

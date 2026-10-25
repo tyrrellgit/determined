@@ -1,4 +1,3 @@
-use rand;
 use rand_distr::Distribution;
 /// Example: Simulate the two-mass-spring-damper Kalman filter.
 ///
@@ -16,6 +15,9 @@ use determined::measurement::Observation;
 use determined::models::{LinearMeasurementNM, LinearTransitionN, LinearUpdateNM};
 use determined::state::State;
 
+// returns the filter with the true-system and measurement closures; `impl Fn`
+// types cannot be named in a type alias
+#[allow(clippy::type_complexity)]
 fn setup_two_mass_spring_damper_filter() -> (
     KalmanFilterNM<4, 2>,
     impl Fn(&State<na::Const<4>>) -> State<na::Const<4>>,
@@ -53,11 +55,11 @@ fn setup_two_mass_spring_damper_filter() -> (
 
     // Discrete state transition matrix: F = I + Δt·A
     let f = identity + delta_t * a;
-    let f_model = f.clone(); // for model closure
+    let f_model = f; // for model closure
 
     // Measurement matrix H: observe only positions
     let h = na::SMatrix::<f64, 2, 4>::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
-    let h_model = h.clone(); // for measurement closure
+    let h_model = h; // for measurement closure
 
     // Process noise covariance Q
     let sigma_q = na::SMatrix::<f64, 4, 4>::from_diagonal(&na::SVector::from_row_slice(&[
@@ -66,17 +68,17 @@ fn setup_two_mass_spring_damper_filter() -> (
         0.3 * delta_t,
         0.05 * delta_t,
     ]));
-    let q = &sigma_q * sigma_q.transpose();
+    let q = sigma_q * sigma_q.transpose();
 
     // Measurement noise covariance R
     let sigma_r =
         na::SMatrix::<f64, 2, 2>::from_diagonal(&na::SVector::from_row_slice(&[0.1, 0.1]));
-    let r = &sigma_r * sigma_r.transpose();
+    let r = sigma_r * sigma_r.transpose();
 
     let x_hat_init = na::SVector::<f64, 4>::new(-1.0, 0.0, -0.5, 0.0);
 
     let x = State {
-        value: x_hat_init.into(),
+        value: x_hat_init,
         covariance: Some(identity * 2.0),
         epoch: Epoch::new(0),
     }
@@ -104,7 +106,7 @@ fn setup_two_mass_spring_damper_filter() -> (
 
     // function closure for measurement model
     let h = move |state: &State<na::Const<4>>| -> Observation<na::Const<2>> {
-        let measurement_value = h_model * &state.value;
+        let measurement_value = h_model * state.value;
         Observation {
             value: measurement_value,
             epoch: Epoch::new(state.epoch.value),
@@ -123,7 +125,7 @@ fn main() {
         epoch: Epoch { value: 0 },
     };
 
-    let num_steps = 100 as i64;
+    let num_steps = 100_i64;
     let epoch = Epoch { value: 0 };
     let noise_std_dev = 0.05;
 
@@ -153,7 +155,7 @@ fn main() {
         let measurement_value = h(&x_true).value + noise_matrix;
         let observation = Observation {
             value: measurement_value,
-            epoch: Epoch::new(step as i64),
+            epoch: Epoch::new(step),
         };
 
         // Update filter

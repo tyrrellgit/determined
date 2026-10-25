@@ -119,11 +119,7 @@ where
     /// changed between steps (non-stationary process noise) is picked up.
     fn predict(&mut self, f: &na::OMatrix<f64, N, N>, q: &na::OMatrix<f64, N, N>) {
         let n = self.d.len();
-        if self
-            .process
-            .as_ref()
-            .map_or(true, |process| &process.q != q)
-        {
+        if self.process.as_ref().is_none_or(|process| &process.q != q) {
             let (g, dq) = udu_decomposition(q);
             self.process = Some(ProcessNoiseFactors {
                 q: q.clone(),

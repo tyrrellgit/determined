@@ -54,10 +54,7 @@ impl PyTransitionModel {
     #[new]
     #[pyo3(signature = (model, *, state))]
     pub fn new(model: Py<PyAny>, state: PyState) -> Self {
-        PyTransitionModel {
-            model: model,
-            state,
-        }
+        PyTransitionModel { model, state }
     }
 
     #[getter]
@@ -146,7 +143,7 @@ impl Clone for PyMeasurementModel {
 impl PyMeasurementModel {
     #[new]
     pub fn new(model: Py<PyAny>) -> Self {
-        PyMeasurementModel { model: model }
+        PyMeasurementModel { model }
     }
 
     #[getter]
@@ -295,7 +292,7 @@ impl PyUpdateModel {
             let _measurement: PyMeasurementModel = measurement.extract(py).unwrap();
 
             PyUpdateModel {
-                model: model,
+                model,
                 state: _transition.state.clone(),
                 transition: _transition,
                 measurement: _measurement,

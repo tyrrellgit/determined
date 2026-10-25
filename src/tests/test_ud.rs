@@ -253,9 +253,7 @@ fn test_ud_dyn_matches_static() {
     let q = na::SMatrix::<f64, 3, 3>::identity() * 0.02;
     let h = na::SMatrix::<f64, 2, 3>::new(1.0, 0.0, 0.0, 0.0, 1.0, 1.0);
     let r = na::SMatrix::<f64, 2, 2>::new(0.1, 0.04, 0.04, 0.2);
-    let dynm = |m: &dyn Fn(usize, usize) -> f64, rows, cols| {
-        na::DMatrix::from_fn(rows, cols, |i, j| m(i, j))
-    };
+    let dynm = |m: &dyn Fn(usize, usize) -> f64, rows, cols| na::DMatrix::from_fn(rows, cols, m);
 
     let mut fixed = UDKalmanFilterNM::new(LinearUDUpdateNM::<3, 2>::new(
         LinearMeasurementNM::<3, 2>::new(h, r),

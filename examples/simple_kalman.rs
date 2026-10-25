@@ -6,8 +6,6 @@ use determined::measurement::Observation;
 use determined::models::*;
 use determined::state::State;
 
-use spdlog;
-
 fn main() {
     spdlog::info!("Setting up initial state...");
     // initial state

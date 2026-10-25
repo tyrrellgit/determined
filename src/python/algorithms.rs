@@ -130,6 +130,8 @@ pub struct PyExtendedKalmanFilter {
 }
 
 py_filter!(PyExtendedKalmanFilter {
+    // the parameters are the Python keyword arguments
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (state, *, f, jac_f, q, h, jac_h, r))]
     fn new(
@@ -183,6 +185,8 @@ pub struct PyUnscentedKalmanFilter {
 }
 
 py_filter!(PyUnscentedKalmanFilter {
+    // the parameters are the Python keyword arguments
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0))]
     fn new(
@@ -268,6 +272,8 @@ pub struct PyUDExtendedKalmanFilter {
 }
 
 py_filter!(PyUDExtendedKalmanFilter {
+    // the parameters are the Python keyword arguments
+    #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (state, *, f, jac_f, q, h, jac_h, r))]
     fn new(
