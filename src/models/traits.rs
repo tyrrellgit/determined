@@ -87,8 +87,9 @@ where
         + na::allocator::Allocator<N, N>
         + na::allocator::Allocator<M, M>
 {
-    /// inverse measurement model h^-1(z) -> x
-    fn inverse(&self, obs: &Observation<M>) -> State<N>;
+    /// inverse measurement model h^-1(z) -> x, or `None` if this model has
+    /// no inverse (e.g. a rank deficient measurement matrix)
+    fn inverse(&self, obs: &Observation<M>) -> Option<State<N>>;
 }
 
 /// Update model trait.

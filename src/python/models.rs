@@ -7,7 +7,7 @@
 //! | Wrapper            | Rust traits                                                  | Python methods                              |
 //! |--------------------|--------------------------------------------------------------|---------------------------------------------|
 //! | `TransitionModel`  | `TransitionModel`, `TransitionJacobian`                      | `state(epoch)`, `jacobian(state)`           |
-//! | `MeasurementModel` | `MeasurementModel`, `MeasurementJacobian`, `InverseMeasurement` | `projection(state)`, `noise()`, `jacobian(state)`, `inverse(observation)` |
+//! | `MeasurementModel` | `MeasurementModel`, `MeasurementJacobian`, `InverseMeasurement` | `projection(state)`, `noise()`, `jacobian(state)`, `inverse(observation)` (may return `None`) |
 //! | `UpdateModel`      | `UpdateModel`                                                | `apply(observation)`                        |
 //!
 //! Each Python method is only called when the matching Rust method is.
@@ -175,9 +175,8 @@ impl PyMeasurementModel {
     }
 
     #[pyo3(name="inverse")]
-    pub fn project_observation(&mut self, observation: PyObservation) -> PyState {
-        let proj = self.inverse(&observation.inner);
-        PyState { inner: proj.ptr() }
+    pub fn project_observation(&mut self, observation: PyObservation) -> Option<PyState> {
+        self.inverse(&observation.inner).map(|proj| PyState { inner: proj.ptr() })
     }
 
     #[pyo3(name="jacobian")]
@@ -257,7 +256,7 @@ impl MeasurementJacobian<na::Dyn, na::Dyn> for PyMeasurementModel {
 }
 
 impl InverseMeasurement<na::Dyn, na::Dyn> for PyMeasurementModel {
-    fn inverse(&self, obs: &Observation<na::Dyn>) -> State<na::Dyn> {
+    fn inverse(&self, obs: &Observation<na::Dyn>) -> Option<State<na::Dyn>> {
 
         let py_obs = PyObservation {
                 inner: Observation {
@@ -277,11 +276,11 @@ impl InverseMeasurement<na::Dyn, na::Dyn> for PyMeasurementModel {
                 )
                 .expect("Failed to call inverse()");
 
-            let state: PyState = result
+            let state: Option<PyState> = result
                 .extract()
-                .expect("inverse() must return <State>");
+                .expect("inverse() must return <State> or None");
 
-            state.inner.read().unwrap().clone()
+            state.map(|state| state.inner.read().unwrap().clone())
         })
     }
 }

@@ -10,6 +10,12 @@
 //!
 //! The closures are run on copies of the state, so no lock is held while user
 //! code runs.
+//!
+//! The sigma points need a Cholesky factor of `(n + lambda) P`, so `P` must be
+//! strictly positive definite and `n + lambda = alpha^2 (n + kappa)` positive.
+//! A semi-definite `P` (e.g. a component known exactly), a missing covariance
+//! or `kappa <= -n` makes predict and update log an error and leave the state
+//! unchanged.
 
 use crate::common::{ na, FilterAllocator };
 use crate::epoch::Epoch;
@@ -243,7 +249,7 @@ where
     }
 
     /// Supply an inverse measurement function h^-1(z) -> x.
-    /// Without one, `inverse` warns and returns a zero state.
+    /// Without one, `inverse` returns `None`.
     pub fn with_inverse(mut self, h_inv: HInv<N, M>) -> Self {
         self.h_inv = Some(h_inv);
         self
@@ -275,22 +281,8 @@ where
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
     /// Uses the function supplied with `with_inverse`, if any.
-    fn inverse(&self, obs: &Observation<M>) -> State<N> {
-        match &self.h_inv {
-            Some(h_inv) => h_inv(obs),
-            None => {
-                spdlog::warn!(
-                    "No inverse measurement function supplied; inverse projection will return zero."
-                );
-                // the state dimension is only known statically
-                let n = N::from_usize(N::try_to_usize().unwrap_or(0));
-                State {
-                    value: na::OVector::<f64, N>::zeros_generic(n, na::Const::<1>),
-                    covariance: None,
-                    epoch: obs.epoch,
-                }
-            }
-        }
+    fn inverse(&self, obs: &Observation<M>) -> Option<State<N>> {
+        self.h_inv.as_ref().map(|h_inv| h_inv(obs))
     }
 }
 

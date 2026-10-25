@@ -37,6 +37,19 @@ use crate::models::linear::{ LinearTransition, LinearMeasurement };
 use crate::models::nonlinear::{ NonLinearTransition, NonLinearMeasurement };
 
 
+/// UD factors of the process noise, `Q = G diag(dq) G^T`, with the `Q` they
+/// were computed from.
+#[derive(Clone, Debug)]
+struct ProcessNoiseFactors<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    q: na::OMatrix<f64, N, N>,
+    g: na::OMatrix<f64, N, N>,
+    dq: na::OVector<f64, N>,
+}
+
 /// UD factors of a covariance, `P = U diag(d) U^T`.
 #[derive(Clone, Debug)]
 pub struct UDFactors<N>
@@ -48,6 +61,8 @@ where
     pub d: na::OVector<f64, N>,
     /// covariance last written to the state, to detect outside changes
     written: Option<na::OMatrix<f64, N, N>>,
+    /// factors of the process noise, reused until Q changes
+    process: Option<ProcessNoiseFactors<N>>,
 }
 
 impl<N> UDFactors<N>
@@ -62,7 +77,7 @@ where
                 "Covariance is not positive semi-definite; its UD factors have negative entries."
             );
         }
-        UDFactors { u, d, written: None }
+        UDFactors { u, d, written: None, process: None }
     }
 
     /// `P = U D U^T`
@@ -77,7 +92,10 @@ where
     fn sync(&mut self, state: &State<N>) {
         let p = state.covariance();
         if self.written.as_ref() != Some(&p) {
+            // the process noise did not change, keep its factors
+            let process = self.process.take();
             *self = Self::from_covariance(&p);
+            self.process = process;
         }
     }
 
@@ -91,11 +109,20 @@ where
     /// Time update: replace the factors with those of `F P F^T + Q`, by
     /// weighted modified Gram-Schmidt on `W = [F U, G]` with weights
     /// `diag(D, D_Q)` (§II.A). `W` is kept as its two blocks `F U` and `G`.
+    ///
+    /// `Q = G D_Q G^T` is factorised once and reused; it is factorised again
+    /// whenever `q` differs from the `Q` the factors came from, so a `Q`
+    /// changed between steps (non-stationary process noise) is picked up.
     fn predict(&mut self, f: &na::OMatrix<f64, N, N>, q: &na::OMatrix<f64, N, N>) {
         let n = self.d.len();
-        let (g, dq) = udu_decomposition(q);
+        if self.process.as_ref().map_or(true, |process| &process.q != q) {
+            let (g, dq) = udu_decomposition(q);
+            self.process = Some(ProcessNoiseFactors { q: q.clone(), g, dq });
+        }
+        let process = self.process.as_ref().unwrap();
+        let dq = &process.dq;
         let mut a = f * &self.u;    // rows of W, first block
-        let mut b = g;              // rows of W, second block
+        let mut b = process.g.clone();  // rows of W, second block
 
         let (nd, _) = self.u.shape_generic();
         let mut u = na::OMatrix::<f64, N, N>::identity_generic(nd, nd);

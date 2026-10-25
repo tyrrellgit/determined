@@ -138,7 +138,7 @@ where
 {
     pub h: na::OMatrix<f64, M, N>,             // measurement matrix
     pub r: na::OMatrix<f64, M, M>,             // measurement noise covariance(M x M)
-    h_inv: na::OMatrix<f64, N, M>,             // inverse of H
+    h_inv: Option<na::OMatrix<f64, N, M>>,     // pseudo-inverse of H, if full rank
 }
 
 /// Statically sized `LinearMeasurement`.
@@ -152,11 +152,7 @@ where
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
     pub fn new(h: na::OMatrix<f64, M, N>, r: na::OMatrix<f64, M, M>) -> Self {
-        let h_inv = moore_penrose_inverse(&h).unwrap_or_else(|| {
-            spdlog::warn!("Measurement matrix H is non-invertible; inverse projection will return zero.");
-            let (m, n) = h.shape_generic();
-            na::OMatrix::<f64, N, M>::zeros_generic(n, m)
-        });
+        let h_inv = moore_penrose_inverse(&h);
         LinearMeasurement { h, r, h_inv }
     }
 }
@@ -211,13 +207,13 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    /// Pseudo-inverse projection; zero if H is rank deficient.
-    fn inverse(&self, obs: &Observation<M>) -> State<N> {
-        State {
-            value: &self.h_inv * &obs.value,
+    /// Pseudo-inverse projection; `None` if H is rank deficient.
+    fn inverse(&self, obs: &Observation<M>) -> Option<State<N>> {
+        self.h_inv.as_ref().map(|h_inv| State {
+            value: h_inv * &obs.value,
             covariance: None,
             epoch: obs.epoch,
-        }
+        })
     }
 }
 
