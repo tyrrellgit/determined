@@ -9,16 +9,15 @@
 //! The closures are run on a copy of the state, so no lock is held while user
 //! code runs.
 
-use crate::common::{ na, FilterAllocator };
+use crate::common::{FilterAllocator, na};
 use crate::epoch::Epoch;
 use crate::measurement::Observation;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
 use na::allocator::Allocator;
 
-use crate::models::traits::{ 
-    TransitionModel, TransitionJacobian,
-    MeasurementModel, MeasurementJacobian, InverseMeasurement,
+use crate::models::traits::{
+    InverseMeasurement, MeasurementJacobian, MeasurementModel, TransitionJacobian, TransitionModel,
     UpdateModel,
 };
 use crate::models::update::kalman_update;
@@ -34,7 +33,6 @@ pub type H<N, M> = Box<dyn Fn(&State<N>) -> na::OVector<f64, M> + Send + Sync>;
 pub type JH<N, M> = Box<dyn Fn(&State<N>) -> na::OMatrix<f64, M, N> + Send + Sync>;
 /// Optional inverse measurement: h^-1(z) -> x
 pub type HInv<N, M> = Box<dyn Fn(&Observation<M>) -> State<N> + Send + Sync>;
-
 
 // Transition Models
 // NonLinear (Discrete Time)
@@ -56,18 +54,13 @@ impl<N> NonLinearTransition<N>
 where
     N: na::Dim,
     na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
-{   
+{
     /// `f` advances the state by a single epoch; it is called once per epoch
     /// step, and `j` is evaluated at the state *before* each step.
-    pub fn new(
-        state: StatePtr<N>,
-        f: F<N>,
-        j: J<N>,
-        q: na::OMatrix<f64, N, N>
-    ) -> Self {
+    pub fn new(state: StatePtr<N>, f: F<N>, j: J<N>, q: na::OMatrix<f64, N, N>) -> Self {
         NonLinearTransition { state, f, j, q }
     }
-}   
+}
 
 impl<N> TransitionModel<N> for NonLinearTransition<N>
 where
@@ -137,13 +130,14 @@ where
     N: na::Dim,
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
-{   
-    pub fn new(
-        h: H<N, M>,
-        j: JH<N, M>,
-        r: na::OMatrix<f64, M, M>
-    ) -> Self {
-        NonLinearMeasurement{ h, j, r, h_inv: None }
+{
+    pub fn new(h: H<N, M>, j: JH<N, M>, r: na::OMatrix<f64, M, M>) -> Self {
+        NonLinearMeasurement {
+            h,
+            j,
+            r,
+            h_inv: None,
+        }
     }
 
     /// Supply an inverse measurement function h^-1(z) -> x.
@@ -166,7 +160,7 @@ where
             r,
         )
     }
-} 
+}
 
 impl<N, M> MeasurementModel<N, M> for NonLinearMeasurement<N, M>
 where
@@ -177,7 +171,7 @@ where
     fn projection(&self, state: &State<N>) -> Observation<M> {
         Observation {
             value: (self.h)(state),
-            epoch: state.epoch
+            epoch: state.epoch,
         }
     }
 
@@ -216,9 +210,9 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    pub state: StatePtr<N>,                          // mutable ref. to state
-    pub measurement: NonLinearMeasurement<N, M>,     // measurement model
-    pub transition: NonLinearTransition<N>,          // transition model
+    pub state: StatePtr<N>,                      // mutable ref. to state
+    pub measurement: NonLinearMeasurement<N, M>, // measurement model
+    pub transition: NonLinearTransition<N>,      // transition model
 }
 
 /// Statically sized `NonLinearUpdate`.
@@ -253,12 +247,11 @@ where
     fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N> {
         match epoch {
             Some(epoch) => self.transition.state(epoch),
-            _ => &self.transition.state
+            _ => &self.transition.state,
         }
     }
-    
-    fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
 
+    fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
         // propagate state to observation epoch
         _ = self.transition.state(&observation.epoch);
         let mut state = self.state.read().unwrap().clone();
@@ -267,7 +260,13 @@ where
         let z_x = self.measurement.projection(&state).value;
         let h = self.measurement.jacobian(&state);
 
-        if kalman_update(&mut state, &observation.value, &z_x, &h, &self.measurement.noise()) {
+        if kalman_update(
+            &mut state,
+            &observation.value,
+            &z_x,
+            &h,
+            &self.measurement.noise(),
+        ) {
             *self.state.write().unwrap() = state;
         }
 

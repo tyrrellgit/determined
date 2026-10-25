@@ -1,5 +1,5 @@
-use nalgebra as na;
 use na::allocator::Allocator;
+use nalgebra as na;
 
 /// Moore-Penrose pseudo-inverse of a full-rank matrix.
 ///
@@ -33,7 +33,9 @@ where
 /// A zero pivot (a semi-definite `M`) gives zero off-diagonal entries in that
 /// column of `U`. A negative entry in `D` means `M` was not positive
 /// semi-definite.
-pub fn udu_decomposition<D>(m: &na::OMatrix<f64, D, D>) -> (na::OMatrix<f64, D, D>, na::OVector<f64, D>)
+pub fn udu_decomposition<D>(
+    m: &na::OMatrix<f64, D, D>,
+) -> (na::OMatrix<f64, D, D>, na::OVector<f64, D>)
 where
     D: na::Dim,
     na::DefaultAllocator: Allocator<D, D> + Allocator<D>,

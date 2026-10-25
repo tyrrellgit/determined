@@ -1,26 +1,23 @@
-use crate::measurement::Observation;
-use crate::state::State;
-use crate::filter::Filter;
-use crate::algorithms::{ ExtendedKalmanFilterNM, KalmanFilterNM };
-use crate::models::*;
-use crate::common::na as na;
+use crate::algorithms::{ExtendedKalmanFilterNM, KalmanFilterNM};
+use crate::common::na;
 use crate::epoch::Epoch;
+use crate::filter::Filter;
+use crate::measurement::Observation;
+use crate::models::*;
+use crate::state::State;
 
 fn initial_state() -> State<na::Const<2>> {
     State::<na::Const<2>>::new(
-        vec![1.0, 1.0], 
-        vec![
-            vec![1.0, 0.0], 
-            vec![0.0, 1.0]
-        ],
-        Epoch::new(0))
+        vec![1.0, 1.0],
+        vec![vec![1.0, 0.0], vec![0.0, 1.0]],
+        Epoch::new(0),
+    )
 }
 
 /// A linear problem run through the EKF must match the linear Kalman filter.
 #[test]
 fn test_extended_kalman_matches_linear() {
-    let f = na::SMatrix::<f64, 2, 2>::from_diagonal(
-        &na::SVector::from_row_slice(&[1.5, 0.5]));
+    let f = na::SMatrix::<f64, 2, 2>::from_diagonal(&na::SVector::from_row_slice(&[1.5, 0.5]));
     let q = &na::SMatrix::<f64, 2, 2>::identity() * 0.05;
     let h = na::SMatrix::<f64, 2, 2>::identity();
     let r = &na::SMatrix::<f64, 2, 2>::identity() * 0.01;
@@ -43,7 +40,7 @@ fn test_extended_kalman_matches_linear() {
     ));
 
     for t in 1..=3 {
-        let obs = Observation{
+        let obs = Observation {
             value: na::SMatrix::<f64, 2, 1>::from_row_slice(&[1.0 + t as f64, 0.5]),
             epoch: Epoch::new(t),
         };
@@ -70,7 +67,8 @@ fn test_extended_kalman_predict_steps() {
     let mut ekf = ExtendedKalmanFilterNM::new(NonLinearUpdateNM::<2, 2>::new(
         NonLinearMeasurementNM::<2, 2>::linear(
             na::SMatrix::<f64, 2, 2>::identity(),
-            na::SMatrix::<f64, 2, 2>::identity()),
+            na::SMatrix::<f64, 2, 2>::identity(),
+        ),
         NonLinearTransitionN::<2>::new(
             initial_state().ptr(),
             Box::new(|state| state.value * 2.0),
@@ -80,12 +78,21 @@ fn test_extended_kalman_predict_steps() {
     ));
 
     let state = ekf.predict(&Epoch::new(3));
-    assert_eq!(state.read().unwrap().value, na::SVector::<f64, 2>::new(8.0, 8.0));
-    assert_eq!(state.read().unwrap().covariance(), na::SMatrix::<f64, 2, 2>::identity() * 64.0);
+    assert_eq!(
+        state.read().unwrap().value,
+        na::SVector::<f64, 2>::new(8.0, 8.0)
+    );
+    assert_eq!(
+        state.read().unwrap().covariance(),
+        na::SMatrix::<f64, 2, 2>::identity() * 64.0
+    );
 
     // predicting to the same epoch again must not propagate
     let state = ekf.predict(&Epoch::new(3));
-    assert_eq!(state.read().unwrap().value, na::SVector::<f64, 2>::new(8.0, 8.0));
+    assert_eq!(
+        state.read().unwrap().value,
+        na::SVector::<f64, 2>::new(8.0, 8.0)
+    );
 }
 
 /// A genuinely nonlinear (range) sensor pulls the estimate towards the truth
@@ -108,19 +115,21 @@ fn test_extended_kalman_range_sensor() {
         State::<na::Const<2>>::new(
             vec![2.0, 2.0],
             vec![vec![4.0, 0.0], vec![0.0, 4.0]],
-            Epoch::new(0)).ptr(),
+            Epoch::new(0),
+        )
+        .ptr(),
         Box::new(|state| state.value),
         Box::new(|_| na::SMatrix::<f64, 2, 2>::identity()),
         na::SMatrix::<f64, 2, 2>::zeros(),
     );
 
-    let mut ekf = ExtendedKalmanFilterNM::new(
-        NonLinearUpdateNM::<2, 1>::new(measurement, transition));
+    let mut ekf =
+        ExtendedKalmanFilterNM::new(NonLinearUpdateNM::<2, 1>::new(measurement, transition));
 
     let mut err = (2.0f64 * 2.0 + 2.0 * 2.0).sqrt() - truth_range;
     let mut trace = 8.0;
     for t in 1..=5 {
-        let state = ekf.update(&Observation{
+        let state = ekf.update(&Observation {
             value: na::SMatrix::<f64, 1, 1>::new(truth_range),
             epoch: Epoch::new(t),
         });
@@ -128,7 +137,11 @@ fn test_extended_kalman_range_sensor() {
 
         let new_err = state.value.norm() - truth_range;
         let new_trace = state.covariance().trace();
-        assert!(new_err.abs() < err.abs(), "Range error did not shrink at t={}", t);
+        assert!(
+            new_err.abs() < err.abs(),
+            "Range error did not shrink at t={}",
+            t
+        );
         assert!(new_trace < trace, "Uncertainty did not shrink at t={}", t);
         err = new_err;
         trace = new_trace;

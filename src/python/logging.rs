@@ -7,7 +7,7 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use spdlog::formatter::Formatter;
 use spdlog::sink::Sink;
-use spdlog::{ ErrorHandler, Level, LevelFilter, Logger, Record };
+use spdlog::{ErrorHandler, Level, LevelFilter, Logger, Record};
 
 const LOGGER_NAME: &str = "determined";
 
@@ -33,9 +33,12 @@ impl Sink for PyLogSink {
     fn log(&self, record: &Record) -> spdlog::Result<()> {
         Python::attach(|py| {
             // never fail the caller because of a logging problem
-            let _ = py.import("logging")
+            let _ = py
+                .import("logging")
                 .and_then(|logging| logging.call_method1("getLogger", (LOGGER_NAME,)))
-                .and_then(|logger| logger.call_method1("log", (py_level(record.level()), record.payload())));
+                .and_then(|logger| {
+                    logger.call_method1("log", (py_level(record.level()), record.payload()))
+                });
         });
         Ok(())
     }

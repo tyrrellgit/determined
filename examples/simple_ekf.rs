@@ -1,20 +1,22 @@
 //! Extended Kalman filter tracking a static 2D target from range-only
 //! measurements, a nonlinear sensor h(x) = |x|.
 
-use determined::measurement::Observation;
-use determined::state::State;
-use determined::filter::Filter;
 use determined::algorithms::ExtendedKalmanFilterNM;
-use determined::models::*;
-use determined::common::na as na;
+use determined::common::na;
 use determined::epoch::Epoch;
+use determined::filter::Filter;
+use determined::measurement::Observation;
+use determined::models::*;
+use determined::state::State;
 
 fn main() {
     // initial guess (2, 2) with a wide covariance; the target is really at (3, 4)
     let state = State::<na::Const<2>>::new(
         vec![2.0, 2.0],
         vec![vec![4.0, 0.0], vec![0.0, 4.0]],
-        Epoch::new(0)).ptr();
+        Epoch::new(0),
+    )
+    .ptr();
 
     // static target: x(t + 1) = x(t)
     let transition = NonLinearTransitionN::<2>::new(
@@ -34,8 +36,8 @@ fn main() {
         na::SMatrix::<f64, 1, 1>::new(0.01),
     );
 
-    let mut filter = ExtendedKalmanFilterNM::new(
-        NonLinearUpdateNM::<2, 1>::new(measurement, transition));
+    let mut filter =
+        ExtendedKalmanFilterNM::new(NonLinearUpdateNM::<2, 1>::new(measurement, transition));
 
     for t in 1..=5 {
         let obs = Observation {

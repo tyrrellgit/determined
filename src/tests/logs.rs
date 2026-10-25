@@ -6,11 +6,11 @@
 //! other test still print, so unexpected warnings stay visible.
 
 use std::cell::Cell;
-use std::sync::{ Arc, Once };
+use std::sync::{Arc, Once};
 
-use spdlog::{ ErrorHandler, LevelFilter, Logger, Record };
 use spdlog::formatter::Formatter;
 use spdlog::sink::Sink;
+use spdlog::{ErrorHandler, LevelFilter, Logger, Record};
 
 thread_local! {
     static QUIET: Cell<bool> = const { Cell::new(false) };

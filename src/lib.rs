@@ -15,14 +15,14 @@
 //! - `measurement` — measurement/observation helpers.
 //! - `models` — traits for `StateTransition` and `MeasurementModel` used by EKF.
 
-pub mod common;
 pub mod algorithms;
-pub mod measurement;
-pub mod state;
+pub mod common;
 pub mod epoch;
-pub mod models;
 pub mod filter;
+pub mod measurement;
+pub mod models;
 pub mod python;
+pub mod state;
 
 #[cfg(test)]
 mod tests;

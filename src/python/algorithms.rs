@@ -23,30 +23,27 @@
 //! the filter's internal state, not snapshots: they change on the next call.
 //! Copy the arrays (`state.value.copy()`) if you need to keep one.
 
-use pyo3::prelude::*;
 use numpy::PyReadonlyArray2;
+use pyo3::prelude::*;
 
-use crate::common::na;
 use crate::algorithms::{
-    KalmanFilterT, KalmanFilterDyn, ExtendedKalmanFilterDyn, UnscentedKalmanFilterDyn,
-    UDKalmanFilterDyn, UDExtendedKalmanFilterDyn,
+    ExtendedKalmanFilterDyn, KalmanFilterDyn, KalmanFilterT, UDExtendedKalmanFilterDyn,
+    UDKalmanFilterDyn, UnscentedKalmanFilterDyn,
 };
+use crate::common::na;
 use crate::models::{
-    LinearMeasurement, LinearTransition, LinearUpdate,
-    NonLinearMeasurement, NonLinearTransition, NonLinearUpdate,
-    UnscentedMeasurement, UnscentedTransition, UnscentedUpdate, UnscentedParams,
-    LinearUDUpdate, NonLinearUDUpdate,
+    LinearMeasurement, LinearTransition, LinearUDUpdate, LinearUpdate, NonLinearMeasurement,
+    NonLinearTransition, NonLinearUDUpdate, NonLinearUpdate, UnscentedMeasurement, UnscentedParams,
+    UnscentedTransition, UnscentedUpdate,
 };
 
+use crate::python::arrays::{check_shape, check_square, to_dmatrix};
+use crate::python::callbacks::{ErrorSlot, check_callable, matrix_model, vector_model};
 use crate::python::epoch::PyEpoch;
-use crate::python::state::PyState;
+use crate::python::filter::FilterCore;
 use crate::python::measurement::PyObservation;
 use crate::python::models::PyUpdateModel;
-use crate::python::arrays::{ to_dmatrix, check_shape, check_square };
-use crate::python::callbacks::{ ErrorSlot, check_callable, vector_model, matrix_model };
-use crate::python::filter::FilterCore;
-
-
+use crate::python::state::PyState;
 
 /// The `#[pymethods]` of a Python filter class: the constructor given, plus
 /// the methods every filter shares, forwarded to the class's
@@ -88,7 +85,7 @@ macro_rules! py_filter {
 ///
 /// f, q: (N, N) transition and process noise; h: (M, N) measurement matrix;
 /// r: (M, M) measurement noise. Returned states are live views of the filter state.
-#[pyclass(name="KalmanFilter")]
+#[pyclass(name = "KalmanFilter")]
 pub struct PyKalmanFilter {
     core: FilterCore<KalmanFilterDyn>,
 }
@@ -121,14 +118,13 @@ py_filter!(PyKalmanFilter {
     }
 });
 
-
 // Extended Kalman Filter
 /// Extended Kalman filter: the maths in Rust, the model functions in Python.
 ///
 /// f(x, t), h(x, t) and their Jacobians jac_f (N, N), jac_h (M, N); q (N, N) and
 /// r (M, M) noise; t is the integer epoch. Returned states are live views of the
 /// filter state.
-#[pyclass(name="ExtendedKalmanFilter")]
+#[pyclass(name = "ExtendedKalmanFilter")]
 pub struct PyExtendedKalmanFilter {
     core: FilterCore<ExtendedKalmanFilterDyn>,
 }
@@ -175,14 +171,13 @@ py_filter!(PyExtendedKalmanFilter {
     }
 });
 
-
 // Unscented Kalman Filter
 /// Unscented Kalman filter: no Jacobians, f(x, t) and h(x, t) are evaluated at
 /// 2N + 1 sigma points.
 ///
 /// q (N, N) and r (M, M) noise; alpha, beta, kappa: sigma point parameters. Needs a
 /// positive definite covariance. Returned states are live views of the filter state.
-#[pyclass(name="UnscentedKalmanFilter")]
+#[pyclass(name = "UnscentedKalmanFilter")]
 pub struct PyUnscentedKalmanFilter {
     core: FilterCore<UnscentedKalmanFilterDyn>,
 }
@@ -228,11 +223,10 @@ py_filter!(PyUnscentedKalmanFilter {
     }
 });
 
-
 // UD Kalman Filter
 /// Kalman filter in UD factorised form (P = U D U^T), with the same models as
 /// KalmanFilter. Returned states are live views of the filter state.
-#[pyclass(name="UDKalmanFilter")]
+#[pyclass(name = "UDKalmanFilter")]
 pub struct PyUDKalmanFilter {
     core: FilterCore<UDKalmanFilterDyn>,
 }
@@ -265,11 +259,10 @@ py_filter!(PyUDKalmanFilter {
     }
 });
 
-
 // UD Extended Kalman Filter
 /// Extended Kalman filter in UD factorised form (P = U D U^T), with the same models
 /// as ExtendedKalmanFilter. Returned states are live views of the filter state.
-#[pyclass(name="UDExtendedKalmanFilter")]
+#[pyclass(name = "UDExtendedKalmanFilter")]
 pub struct PyUDExtendedKalmanFilter {
     core: FilterCore<UDExtendedKalmanFilterDyn>,
 }
@@ -316,12 +309,11 @@ py_filter!(PyUDExtendedKalmanFilter {
     }
 });
 
-
 // Custom Filter
 /// Filter built from a Python `UpdateModel`: the Python equivalent of a Rust
 /// `KalmanFilterT` with your own update model. The update maths is whatever
 /// your model implements. See `KalmanFilter` for the Rust-computed filter.
-#[pyclass(name="CustomFilter")]
+#[pyclass(name = "CustomFilter")]
 pub struct PyCustomFilter {
     core: FilterCore<KalmanFilterT<na::Dyn, na::Dyn, PyUpdateModel>>,
 }
@@ -333,7 +325,9 @@ impl PyCustomFilter {
         let update = update.clone();
         let state = update.state.clone();
         // the measurement is a Python object, so its size is not known here
-        PyCustomFilter { core: FilterCore::new(KalmanFilterT::new(update), state, None, None) }
+        PyCustomFilter {
+            core: FilterCore::new(KalmanFilterT::new(update), state, None, None),
+        }
     }
 
     fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {

@@ -1,4 +1,4 @@
-//! `Filter` is a trait for basic algorithms. 
+//! `Filter` is a trait for basic algorithms.
 
 use crate::epoch::Epoch;
 

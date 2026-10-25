@@ -1,7 +1,7 @@
 pub use nalgebra as na;
 
-pub mod linalg;
 pub mod composition;
+pub mod linalg;
 
 pub use composition::Composable;
 
@@ -14,14 +14,16 @@ use na::allocator::Allocator;
 /// and dynamically sized (`na::Dyn`) matrices. Use as
 /// `where na::DefaultAllocator: FilterAllocator<N, M>`.
 pub trait FilterAllocator<N: na::Dim, M: na::Dim>:
-    Allocator<N> + Allocator<M>
-    + Allocator<N, N> + Allocator<M, M>
-    + Allocator<M, N> + Allocator<N, M>
-{}
+    Allocator<N> + Allocator<M> + Allocator<N, N> + Allocator<M, M> + Allocator<M, N> + Allocator<N, M>
+{
+}
 
-impl<N: na::Dim, M: na::Dim, A> FilterAllocator<N, M> for A
-where
-    A: Allocator<N> + Allocator<M>
-        + Allocator<N, N> + Allocator<M, M>
-        + Allocator<M, N> + Allocator<N, M>
-{}
+impl<N: na::Dim, M: na::Dim, A> FilterAllocator<N, M> for A where
+    A: Allocator<N>
+        + Allocator<M>
+        + Allocator<N, N>
+        + Allocator<M, M>
+        + Allocator<M, N>
+        + Allocator<N, M>
+{
+}

@@ -1,36 +1,29 @@
-use determined::measurement::Observation;
-use determined::state::State;
-use determined::filter::Filter;
 use determined::algorithms::KalmanFilterNM;
-use determined::models::*;
-use determined::common::na as na;
+use determined::common::na;
 use determined::epoch::Epoch;
+use determined::filter::Filter;
+use determined::measurement::Observation;
+use determined::models::*;
+use determined::state::State;
 
 use spdlog;
 
 fn main() {
-
     spdlog::info!("Setting up initial state...");
     // initial state
     let state = State::<na::Const<2>>::new(
-        vec![1.0, 1.0], 
-        vec![
-            vec![1.0, 0.0], 
-            vec![0.0, 1.0]
-        ],
-        Epoch::new(0)).ptr();
-    
+        vec![1.0, 1.0],
+        vec![vec![1.0, 0.0], vec![0.0, 1.0]],
+        Epoch::new(0),
+    )
+    .ptr();
+
     spdlog::info!("Setting up state dynamics...");
     // Linear Transition model
-    let f= na::SMatrix::<f64, 2, 2>::from_diagonal(
-        &na::SVector::from_row_slice(&[1.5, 2.0]));    
-    let q = &na::SMatrix::<f64, 2,2>::identity() * 0.05;
+    let f = na::SMatrix::<f64, 2, 2>::from_diagonal(&na::SVector::from_row_slice(&[1.5, 2.0]));
+    let q = &na::SMatrix::<f64, 2, 2>::identity() * 0.05;
 
-    let transition = LinearTransitionN::<2>::new(
-        state.clone(),
-        f,
-        q
-    );
+    let transition = LinearTransitionN::<2>::new(state.clone(), f, q);
 
     spdlog::info!("Setting up measurement model...");
     // Linear Measurement model
@@ -39,23 +32,18 @@ fn main() {
 
     let measurement = LinearMeasurementNM::<2, 2>::new(
         h, // observation model
-        r  // observation noise
+        r, // observation noise
     );
 
     spdlog::info!("Building kalman filter...");
     // Kalman Update Model
-    let update = LinearUpdateNM::<2, 2>::new(
-        measurement,
-        transition
-    );
+    let update = LinearUpdateNM::<2, 2>::new(measurement, transition);
 
     // Filter wrapper
-    let mut filter = KalmanFilterNM::new(
-        update
-    );
+    let mut filter = KalmanFilterNM::new(update);
 
     spdlog::info!("Generating dummy observation...");
-    let obs = Observation{
+    let obs = Observation {
         value: na::SMatrix::<f64, 2, 1>::from_row_slice(&[1.0, 1.0]),
         epoch: Epoch::new(0),
     };
@@ -63,7 +51,7 @@ fn main() {
     spdlog::info!("Predicting...");
     // predict
     let _ = filter.predict(&Epoch::new(1));
-    
+
     spdlog::info!("Updating...");
     // measurement update
     let _ = filter.update(&obs);

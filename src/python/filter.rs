@@ -12,11 +12,11 @@ use crate::filter::Filter;
 use crate::measurement::Observation;
 use crate::state::StatePtr;
 
-use crate::python::epoch::PyEpoch;
-use crate::python::state::PyState;
-use crate::python::measurement::PyObservation;
 use crate::python::arrays::check_length;
-use crate::python::callbacks::{ ErrorSlot, guarded };
+use crate::python::callbacks::{ErrorSlot, guarded};
+use crate::python::epoch::PyEpoch;
+use crate::python::measurement::PyObservation;
+use crate::python::state::PyState;
 
 /// A Rust filter, the state it shares with Python, and what is needed to run
 /// it safely from Python.
@@ -33,8 +33,18 @@ impl<F> FilterCore<F>
 where
     F: Filter<StateType = StatePtr<na::Dyn>, ObservationType = Observation<na::Dyn>>,
 {
-    pub fn new(filter: F, state: PyState, error: Option<ErrorSlot>, measurement_dim: Option<usize>) -> Self {
-        FilterCore { filter, state, error, measurement_dim }
+    pub fn new(
+        filter: F,
+        state: PyState,
+        error: Option<ErrorSlot>,
+        measurement_dim: Option<usize>,
+    ) -> Self {
+        FilterCore {
+            filter,
+            state,
+            error,
+            measurement_dim,
+        }
     }
 
     /// Run `op` on the filter; if it has Python model functions and one of
@@ -59,7 +69,9 @@ where
     }
 
     pub fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
+        PyState {
+            inner: self.filter.state(),
+        }
     }
 
     pub fn set_state(&self, state: &PyState) -> PyResult<()> {

@@ -8,18 +8,15 @@
 
 use std::marker::PhantomData;
 
-use crate::common::{ na, FilterAllocator };
-use crate::state::StatePtr;
-use crate::measurement::Observation;
+use crate::common::{FilterAllocator, na};
 use crate::epoch::Epoch;
 use crate::filter::Filter;
+use crate::measurement::Observation;
 use crate::models::{
-    UpdateModel,
-    LinearUpdate, NonLinearUpdate, UnscentedUpdate,
-    LinearUDUpdate, NonLinearUDUpdate,
-    DefaultFromState
+    DefaultFromState, LinearUDUpdate, LinearUpdate, NonLinearUDUpdate, NonLinearUpdate,
+    UnscentedUpdate, UpdateModel,
 };
-
+use crate::state::StatePtr;
 
 /// Generic Kalman Filter implementation for a state of dimension `N` and
 /// measurements of dimension `M`, built from an update model `T`.
@@ -28,7 +25,7 @@ where
     N: na::Dim,
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
-    T: UpdateModel<N, M>
+    T: UpdateModel<N, M>,
 {
     pub state: StatePtr<N>,
     pub update: T,
@@ -41,12 +38,11 @@ where
     N: na::Dim,
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
-    T: UpdateModel<N, M>
-        + DefaultFromState<StateType = StatePtr<N>, DefaultType = T>,
-{   
+    T: UpdateModel<N, M> + DefaultFromState<StateType = StatePtr<N>, DefaultType = T>,
+{
     type DefaultType = Self;
     type StateType = StatePtr<N>;
-    
+
     fn default_from_state(state: Self::StateType) -> Self::DefaultType {
         KalmanFilterT {
             state: state.clone(),
@@ -54,7 +50,6 @@ where
             _measurement: PhantomData,
         }
     }
-
 }
 
 /// Implementation for constructors
@@ -65,9 +60,7 @@ where
     na::DefaultAllocator: FilterAllocator<N, M>,
     T: UpdateModel<N, M>,
 {
-    pub fn new(
-        mut update: T,
-    ) -> Self {
+    pub fn new(mut update: T) -> Self {
         let state = update.state(None);
         KalmanFilterT {
             state: state.clone(),
@@ -110,21 +103,14 @@ where
 
 /// KalmanFilter
 pub type KalmanFilterNM<const N: usize, const M: usize> =
-    KalmanFilterT<
-        na::Const<N>, na::Const<M>,
-        LinearUpdate<na::Const<N>, na::Const<M>>
-    >;
+    KalmanFilterT<na::Const<N>, na::Const<M>, LinearUpdate<na::Const<N>, na::Const<M>>>;
 
 /// KalmanFilter with runtime sized state and measurement
-pub type KalmanFilterDyn =
-    KalmanFilterT<na::Dyn, na::Dyn, LinearUpdate<na::Dyn, na::Dyn>>;
+pub type KalmanFilterDyn = KalmanFilterT<na::Dyn, na::Dyn, LinearUpdate<na::Dyn, na::Dyn>>;
 
 /// Extended Kalman Filter
 pub type ExtendedKalmanFilterNM<const N: usize, const M: usize> =
-    KalmanFilterT<
-        na::Const<N>, na::Const<M>,
-        NonLinearUpdate<na::Const<N>, na::Const<M>>
-    >;
+    KalmanFilterT<na::Const<N>, na::Const<M>, NonLinearUpdate<na::Const<N>, na::Const<M>>>;
 
 /// Extended Kalman Filter with runtime sized state and measurement
 pub type ExtendedKalmanFilterDyn =
@@ -132,10 +118,7 @@ pub type ExtendedKalmanFilterDyn =
 
 /// Unscented Kalman Filter
 pub type UnscentedKalmanFilterNM<const N: usize, const M: usize> =
-    KalmanFilterT<
-        na::Const<N>, na::Const<M>,
-        UnscentedUpdate<na::Const<N>, na::Const<M>>
-    >;
+    KalmanFilterT<na::Const<N>, na::Const<M>, UnscentedUpdate<na::Const<N>, na::Const<M>>>;
 
 /// Unscented Kalman Filter with runtime sized state and measurement
 pub type UnscentedKalmanFilterDyn =
@@ -143,21 +126,14 @@ pub type UnscentedKalmanFilterDyn =
 
 /// UD factorised Kalman Filter
 pub type UDKalmanFilterNM<const N: usize, const M: usize> =
-    KalmanFilterT<
-        na::Const<N>, na::Const<M>,
-        LinearUDUpdate<na::Const<N>, na::Const<M>>
-    >;
+    KalmanFilterT<na::Const<N>, na::Const<M>, LinearUDUpdate<na::Const<N>, na::Const<M>>>;
 
 /// UD factorised Kalman Filter with runtime sized state and measurement
-pub type UDKalmanFilterDyn =
-    KalmanFilterT<na::Dyn, na::Dyn, LinearUDUpdate<na::Dyn, na::Dyn>>;
+pub type UDKalmanFilterDyn = KalmanFilterT<na::Dyn, na::Dyn, LinearUDUpdate<na::Dyn, na::Dyn>>;
 
 /// UD factorised Extended Kalman Filter
 pub type UDExtendedKalmanFilterNM<const N: usize, const M: usize> =
-    KalmanFilterT<
-        na::Const<N>, na::Const<M>,
-        NonLinearUDUpdate<na::Const<N>, na::Const<M>>
-    >;
+    KalmanFilterT<na::Const<N>, na::Const<M>, NonLinearUDUpdate<na::Const<N>, na::Const<M>>>;
 
 /// UD factorised Extended Kalman Filter with runtime sized state and measurement
 pub type UDExtendedKalmanFilterDyn =

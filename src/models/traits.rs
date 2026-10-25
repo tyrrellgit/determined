@@ -7,15 +7,14 @@
 //! separate traits: Jacobians (`TransitionJacobian`, `MeasurementJacobian`,
 //! needed by the Extended Kalman Filter) and the inverse measurement model
 //! (`InverseMeasurement`).
-//! 
+//!
 
-use crate::common::na as na;
+use crate::common::na;
 use crate::epoch::Epoch;
 use crate::measurement::Observation;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
-pub trait DefaultFromState{
-
+pub trait DefaultFromState {
     type DefaultType;
     type StateType;
 
@@ -23,11 +22,10 @@ pub trait DefaultFromState{
 }
 
 /// State transition model trait.
-pub trait TransitionModel<N> 
+pub trait TransitionModel<N>
 where
     N: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
-        + na::allocator::Allocator<N, N>,
+    na::DefaultAllocator: na::allocator::Allocator<N, na::U1> + na::allocator::Allocator<N, N>,
 {
     /// x(t) -> x(t')
     fn state(&mut self, epoch: &Epoch) -> &StatePtr<N>;
@@ -37,8 +35,7 @@ where
 pub trait TransitionJacobian<N>
 where
     N: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
-        + na::allocator::Allocator<N, N>,
+    na::DefaultAllocator: na::allocator::Allocator<N, na::U1> + na::allocator::Allocator<N, N>,
 {
     /// Jacobian df/dx (N x N)
     fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, N, N>;
@@ -53,7 +50,7 @@ where
         + na::allocator::Allocator<M, na::U1>
         + na::allocator::Allocator<N, N>
         + na::allocator::Allocator<M, M>
-        + na::allocator::Allocator<M, N> 
+        + na::allocator::Allocator<M, N>,
 {
     /// measurement projection h(x) -> z
     fn projection(&self, state: &State<N>) -> Observation<M>;
@@ -71,7 +68,7 @@ where
         + na::allocator::Allocator<M, na::U1>
         + na::allocator::Allocator<N, N>
         + na::allocator::Allocator<M, M>
-        + na::allocator::Allocator<M, N> 
+        + na::allocator::Allocator<M, N>,
 {
     /// Jacobian dh/dx (M x N)
     fn jacobian(&self, state: &State<N>) -> na::OMatrix<f64, M, N>;
@@ -85,7 +82,7 @@ where
     na::DefaultAllocator: na::allocator::Allocator<N, na::U1>
         + na::allocator::Allocator<M, na::U1>
         + na::allocator::Allocator<N, N>
-        + na::allocator::Allocator<M, M>
+        + na::allocator::Allocator<M, M>,
 {
     /// inverse measurement model h^-1(z) -> x, or `None` if this model has
     /// no inverse (e.g. a rank deficient measurement matrix)
@@ -101,8 +98,8 @@ where
         + na::allocator::Allocator<M, na::U1>
         + na::allocator::Allocator<N, N>
         + na::allocator::Allocator<M, M>
-        + na::allocator::Allocator<M, N> 
-{   
+        + na::allocator::Allocator<M, N>,
+{
     /// State accessor
     fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N>;
 

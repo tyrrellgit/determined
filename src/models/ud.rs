@@ -22,20 +22,19 @@
 //! uses. If the state's covariance is changed from outside, the factors are
 //! recomputed from it.
 
-use crate::common::{ na, FilterAllocator };
 use crate::common::linalg::udu_decomposition;
+use crate::common::{FilterAllocator, na};
 use crate::epoch::Epoch;
 use crate::measurement::Observation;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
 use na::allocator::Allocator;
 
+use crate::models::linear::{LinearMeasurement, LinearTransition};
+use crate::models::nonlinear::{NonLinearMeasurement, NonLinearTransition};
 use crate::models::traits::{
-    MeasurementModel, MeasurementJacobian, TransitionJacobian, UpdateModel
+    MeasurementJacobian, MeasurementModel, TransitionJacobian, UpdateModel,
 };
-use crate::models::linear::{ LinearTransition, LinearMeasurement };
-use crate::models::nonlinear::{ NonLinearTransition, NonLinearMeasurement };
-
 
 /// UD factors of the process noise, `Q = G diag(dq) G^T`, with the `Q` they
 /// were computed from.
@@ -77,7 +76,12 @@ where
                 "Covariance is not positive semi-definite; its UD factors have negative entries."
             );
         }
-        UDFactors { u, d, written: None, process: None }
+        UDFactors {
+            u,
+            d,
+            written: None,
+            process: None,
+        }
     }
 
     /// `P = U D U^T`
@@ -115,14 +119,22 @@ where
     /// changed between steps (non-stationary process noise) is picked up.
     fn predict(&mut self, f: &na::OMatrix<f64, N, N>, q: &na::OMatrix<f64, N, N>) {
         let n = self.d.len();
-        if self.process.as_ref().map_or(true, |process| &process.q != q) {
+        if self
+            .process
+            .as_ref()
+            .map_or(true, |process| &process.q != q)
+        {
             let (g, dq) = udu_decomposition(q);
-            self.process = Some(ProcessNoiseFactors { q: q.clone(), g, dq });
+            self.process = Some(ProcessNoiseFactors {
+                q: q.clone(),
+                g,
+                dq,
+            });
         }
         let process = self.process.as_ref().unwrap();
         let dq = &process.dq;
-        let mut a = f * &self.u;    // rows of W, first block
-        let mut b = process.g.clone();  // rows of W, second block
+        let mut a = f * &self.u; // rows of W, first block
+        let mut b = process.g.clone(); // rows of W, second block
 
         let (nd, _) = self.u.shape_generic();
         let mut u = na::OMatrix::<f64, N, N>::identity_generic(nd, nd);
@@ -130,7 +142,9 @@ where
 
         for k in (0..n).rev() {
             // weighted norm of the (already orthogonalised) row k
-            let dk: f64 = (0..n).map(|j| a[(k, j)] * self.d[j] * a[(k, j)] + b[(k, j)] * dq[j] * b[(k, j)]).sum();
+            let dk: f64 = (0..n)
+                .map(|j| a[(k, j)] * self.d[j] * a[(k, j)] + b[(k, j)] * dq[j] * b[(k, j)])
+                .sum();
             // a weighted sum of squares: negative only through rounding
             d[k] = dk.max(0.0);
             if dk <= 0.0 {
@@ -138,7 +152,9 @@ where
             }
             // orthogonalise the rows above against row k
             for i in 0..k {
-                let dot: f64 = (0..n).map(|j| a[(i, j)] * self.d[j] * a[(k, j)] + b[(i, j)] * dq[j] * b[(k, j)]).sum();
+                let dot: f64 = (0..n)
+                    .map(|j| a[(i, j)] * self.d[j] * a[(k, j)] + b[(i, j)] * dq[j] * b[(k, j)])
+                    .sum();
                 let uik = dot / dk;
                 u[(i, k)] = uik;
                 for j in 0..n {
@@ -176,7 +192,11 @@ where
         } else {
             // R = U_R D_R U_R^T: filter on U_R^-1 H, U_R^-1 y with noise D_R
             let (ur, dr) = udu_decomposition(r);
-            (ur.solve_upper_triangular(h)?, ur.solve_upper_triangular(y)?, dr)
+            (
+                ur.solve_upper_triangular(h)?,
+                ur.solve_upper_triangular(y)?,
+                dr,
+            )
         };
 
         let mut u = self.u.clone();
@@ -189,7 +209,9 @@ where
             let e = y[i] - (0..n).map(|j| h[(i, j)] * dx[j]).sum::<f64>();
 
             // w = U^T h_i, v = D w
-            let w: Vec<f64> = (0..n).map(|j| (0..n).map(|k| u[(k, j)] * h[(i, k)]).sum()).collect();
+            let w: Vec<f64> = (0..n)
+                .map(|j| (0..n).map(|k| u[(k, j)] * h[(i, k)]).sum())
+                .collect();
             let v: Vec<f64> = (0..n).map(|j| d[j] * w[j]).collect();
 
             let mut k = na::OVector::<f64, N>::zeros_generic(nd, na::Const::<1>);
@@ -225,7 +247,11 @@ where
                 }
                 // alpha_prev = 0 only when the gain so far (k) is zero, so the
                 // value of lambda does not matter then
-                let lambda = if alpha_prev > 0.0 { -w[j] / alpha_prev } else { 0.0 };
+                let lambda = if alpha_prev > 0.0 {
+                    -w[j] / alpha_prev
+                } else {
+                    0.0
+                };
                 for row in 0..n {
                     let u_old = u[(row, j)];
                     u[(row, j)] = u_old + lambda * k[row];
@@ -259,8 +285,7 @@ fn propagate<N>(
     q: &na::OMatrix<f64, N, N>,
     epoch: &Epoch,
     mut step: impl FnMut(&State<N>) -> (na::OVector<f64, N>, na::OMatrix<f64, N, N>),
-)
-where
+) where
     N: na::Dim,
     na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
 {
@@ -294,8 +319,7 @@ fn apply<N, M, Z>(
     factors: &mut UDFactors<N>,
     measurement: &Z,
     observation: &Observation<M>,
-)
-where
+) where
     N: na::Dim,
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
@@ -315,7 +339,6 @@ where
     }
 }
 
-
 // Update Models
 // Linear UD
 pub struct LinearUDUpdate<N, M>
@@ -324,10 +347,10 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    pub state: StatePtr<N>,                      // mutable ref. to state
-    pub measurement: LinearMeasurement<N, M>,    // measurement model
-    pub transition: LinearTransition<N>,         // transition model
-    pub factors: UDFactors<N>,                   // covariance factors
+    pub state: StatePtr<N>,                   // mutable ref. to state
+    pub measurement: LinearMeasurement<N, M>, // measurement model
+    pub transition: LinearTransition<N>,      // transition model
+    pub factors: UDFactors<N>,                // covariance factors
 }
 
 /// Statically sized `LinearUDUpdate`.
@@ -340,10 +363,7 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    pub fn new(
-        measurement: LinearMeasurement<N, M>,
-        transition: LinearTransition<N>,
-    ) -> Self {
+    pub fn new(measurement: LinearMeasurement<N, M>, transition: LinearTransition<N>) -> Self {
         let _state = transition.state.clone();
         let factors = UDFactors::from_covariance(&_state.read().unwrap().covariance());
         LinearUDUpdate {
@@ -364,8 +384,13 @@ where
     fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N> {
         if let Some(epoch) = epoch {
             let f = &self.transition.f;
-            propagate(&self.state, &mut self.factors, &self.transition.q, epoch,
-                |state| (f * &state.value, f.clone()));
+            propagate(
+                &self.state,
+                &mut self.factors,
+                &self.transition.q,
+                epoch,
+                |state| (f * &state.value, f.clone()),
+            );
         }
         &self.state
     }
@@ -373,7 +398,12 @@ where
     fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
         // propagate state to observation epoch
         self.state(Some(&observation.epoch));
-        apply(&self.state, &mut self.factors, &self.measurement, observation);
+        apply(
+            &self.state,
+            &mut self.factors,
+            &self.measurement,
+            observation,
+        );
         &self.state
     }
 }
@@ -385,10 +415,10 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    pub state: StatePtr<N>,                          // mutable ref. to state
-    pub measurement: NonLinearMeasurement<N, M>,     // measurement model
-    pub transition: NonLinearTransition<N>,          // transition model
-    pub factors: UDFactors<N>,                       // covariance factors
+    pub state: StatePtr<N>,                      // mutable ref. to state
+    pub measurement: NonLinearMeasurement<N, M>, // measurement model
+    pub transition: NonLinearTransition<N>,      // transition model
+    pub factors: UDFactors<N>,                   // covariance factors
 }
 
 /// Statically sized `NonLinearUDUpdate`.
@@ -426,11 +456,10 @@ where
         if let Some(epoch) = epoch {
             let transition = &mut self.transition;
             let q = transition.q.clone();
-            propagate(&self.state, &mut self.factors, &q, epoch,
-                |state| {
-                    let f = transition.jacobian(state);
-                    ((transition.f)(state), f)
-                });
+            propagate(&self.state, &mut self.factors, &q, epoch, |state| {
+                let f = transition.jacobian(state);
+                ((transition.f)(state), f)
+            });
         }
         &self.state
     }
@@ -438,7 +467,12 @@ where
     fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
         // propagate state to observation epoch
         self.state(Some(&observation.epoch));
-        apply(&self.state, &mut self.factors, &self.measurement, observation);
+        apply(
+            &self.state,
+            &mut self.factors,
+            &self.measurement,
+            observation,
+        );
         &self.state
     }
 }

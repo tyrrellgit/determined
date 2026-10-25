@@ -1,6 +1,6 @@
 //! Kalman measurement update shared by the linear and nonlinear update models.
 
-use crate::common::{ na, FilterAllocator };
+use crate::common::{FilterAllocator, na};
 use crate::state::State;
 
 /// Apply the Kalman measurement update to `state` in place.

@@ -1,16 +1,15 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use pyo3::prelude::*;
-use numpy::{ PyReadonlyArray1, PyReadonlyArray2 };
 use numpy::ToPyArray;
+use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::prelude::*;
 
-use crate::common::na as na;
+use crate::common::na;
+use crate::python::arrays::{PyMatrix, PyVector, check_square, to_dmatrix, to_pymatrix};
 use crate::python::epoch::PyEpoch;
 use crate::state::{State, StatePtr};
-use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix, check_square };
 
-
-#[pyclass(name="State")]
+#[pyclass(name = "State")]
 #[derive(Clone, Debug)]
 pub struct PyState {
     pub inner: StatePtr<na::Dyn>,
@@ -18,37 +17,33 @@ pub struct PyState {
 
 #[pymethods]
 impl PyState {
-    
     #[new]
     #[pyo3(signature = (value, *, covariance, epoch))]
     fn new(
         value: PyReadonlyArray1<f64>,
         covariance: Option<PyReadonlyArray2<f64>>,
-        epoch: &PyEpoch
+        epoch: &PyEpoch,
     ) -> PyResult<Self> {
-        
-    // numpy -> ndarray (zero-copy view) -> nalgebra
-    let array = value.as_array();
-    let vector = na::DVector::<f64>::from_iterator(
-        array.len(),
-        array.iter().copied()
-    );
-    
-    // Same for covariance
-    let cov = covariance.map(|cov| {
-        // ndarray -> nalgebra (single copy)
-        to_dmatrix(cov.as_array())
-    });
-    if let Some(cov) = &cov {
-        check_square(cov, vector.len(), "covariance")?;
-    }
-        
+        // numpy -> ndarray (zero-copy view) -> nalgebra
+        let array = value.as_array();
+        let vector = na::DVector::<f64>::from_iterator(array.len(), array.iter().copied());
+
+        // Same for covariance
+        let cov = covariance.map(|cov| {
+            // ndarray -> nalgebra (single copy)
+            to_dmatrix(cov.as_array())
+        });
+        if let Some(cov) = &cov {
+            check_square(cov, vector.len(), "covariance")?;
+        }
+
         Ok(PyState {
             inner: State {
                 value: vector,
                 covariance: cov,
                 epoch: epoch.inner,
-            }.ptr()
+            }
+            .ptr(),
         })
     }
 
@@ -85,7 +80,9 @@ impl PyState {
         let dim = self.inner.read().unwrap().dim();
         if incoming.dim() != dim {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "state has dimension {}, expected {dim}", incoming.dim())));
+                "state has dimension {}, expected {dim}",
+                incoming.dim()
+            )));
         }
         *self.inner.write().unwrap() = incoming;
         Ok(())

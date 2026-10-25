@@ -17,23 +17,20 @@
 //! or `kappa <= -n` makes predict and update log an error and leave the state
 //! unchanged.
 
-use crate::common::{ na, FilterAllocator };
+use crate::common::{FilterAllocator, na};
 use crate::epoch::Epoch;
 use crate::measurement::Observation;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
 use na::allocator::Allocator;
 
-use crate::models::traits::{
-    TransitionModel, MeasurementModel, InverseMeasurement, UpdateModel
-};
+use crate::models::traits::{InverseMeasurement, MeasurementModel, TransitionModel, UpdateModel};
 // same closure types as the nonlinear models for h and the inverse measurement
-pub use crate::models::nonlinear::{ H, HInv };
+pub use crate::models::nonlinear::{H, HInv};
 
 /// One-step propagation: x(t) -> x(t + 1). Called once per sigma point, so
 /// it must not keep state between calls (hence `Fn`, not `FnMut`).
 pub type F<N> = Box<dyn Fn(&State<N>) -> na::OVector<f64, N> + Send + Sync>;
-
 
 /// Scaled sigma point parameters (van der Merwe).
 ///
@@ -54,7 +51,11 @@ pub struct UnscentedParams {
 
 impl Default for UnscentedParams {
     fn default() -> Self {
-        UnscentedParams { alpha: 1.0, beta: 2.0, kappa: 0.0 }
+        UnscentedParams {
+            alpha: 1.0,
+            beta: 2.0,
+            kappa: 0.0,
+        }
     }
 }
 
@@ -91,7 +92,11 @@ where
             }
         };
 
-        let at = |value| State { value, covariance: None, epoch: state.epoch };
+        let at = |value| State {
+            value,
+            covariance: None,
+            epoch: state.epoch,
+        };
         let mut points = Vec::with_capacity(2 * n + 1);
         points.push(at(state.value.clone()));
         for i in 0..n {
@@ -129,8 +134,10 @@ where
 
 /// Weighted cross covariance sum_i wc_i (a_i - a_mean)(b_i - b_mean)^T.
 fn weighted_covariance<A, B>(
-    a: &[na::OVector<f64, A>], a_mean: &na::OVector<f64, A>,
-    b: &[na::OVector<f64, B>], b_mean: &na::OVector<f64, B>,
+    a: &[na::OVector<f64, A>],
+    a_mean: &na::OVector<f64, A>,
+    b: &[na::OVector<f64, B>],
+    b_mean: &na::OVector<f64, B>,
     wc: &[f64],
 ) -> na::OMatrix<f64, A, B>
 where
@@ -171,7 +178,12 @@ where
     /// `f` advances the state by a single epoch; it is applied to every sigma
     /// point once per epoch step. Uses the default `UnscentedParams`.
     pub fn new(state: StatePtr<N>, f: F<N>, q: na::OMatrix<f64, N, N>) -> Self {
-        UnscentedTransition { state, f, q, params: UnscentedParams::default() }
+        UnscentedTransition {
+            state,
+            f,
+            q,
+            params: UnscentedParams::default(),
+        }
     }
 
     /// Use different sigma point parameters.
@@ -209,7 +221,8 @@ where
             let propagated: Vec<_> = sigma.points.iter().map(|p| (self.f)(p)).collect();
 
             let mean = weighted_mean(&propagated, &sigma.wm);
-            let cov = weighted_covariance(&propagated, &mean, &propagated, &mean, &sigma.wc) + &self.q;
+            let cov =
+                weighted_covariance(&propagated, &mean, &propagated, &mean, &sigma.wc) + &self.q;
 
             state.value = mean;
             state.covariance = Some(cov);
@@ -265,7 +278,7 @@ where
     fn projection(&self, state: &State<N>) -> Observation<M> {
         Observation {
             value: (self.h)(state),
-            epoch: state.epoch
+            epoch: state.epoch,
         }
     }
 
@@ -293,9 +306,9 @@ where
     M: na::Dim,
     na::DefaultAllocator: FilterAllocator<N, M>,
 {
-    pub state: StatePtr<N>,                          // mutable ref. to state
-    pub measurement: UnscentedMeasurement<N, M>,     // measurement model
-    pub transition: UnscentedTransition<N>,          // transition model (and sigma point parameters)
+    pub state: StatePtr<N>,                      // mutable ref. to state
+    pub measurement: UnscentedMeasurement<N, M>, // measurement model
+    pub transition: UnscentedTransition<N>,      // transition model (and sigma point parameters)
 }
 
 /// Statically sized `UnscentedUpdate`.
@@ -330,12 +343,11 @@ where
     fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N> {
         match epoch {
             Some(epoch) => self.transition.state(epoch),
-            _ => &self.transition.state
+            _ => &self.transition.state,
         }
     }
 
     fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
-
         // propagate state to observation epoch
         _ = self.transition.state(&observation.epoch);
         let mut state = self.state.read().unwrap().clone();
@@ -346,11 +358,16 @@ where
             None => return &self.state,
         };
         let values: Vec<_> = sigma.points.iter().map(|p| p.value.clone()).collect();
-        let projected: Vec<_> = sigma.points.iter().map(|p| (self.measurement.h)(p)).collect();
+        let projected: Vec<_> = sigma
+            .points
+            .iter()
+            .map(|p| (self.measurement.h)(p))
+            .collect();
 
         // predicted measurement, innovation covariance and cross covariance
         let z_mean = weighted_mean(&projected, &sigma.wm);
-        let s = weighted_covariance(&projected, &z_mean, &projected, &z_mean, &sigma.wc) + self.measurement.noise();
+        let s = weighted_covariance(&projected, &z_mean, &projected, &z_mean, &sigma.wc)
+            + self.measurement.noise();
         let pxz = weighted_covariance(&values, &state.value, &projected, &z_mean, &sigma.wc);
 
         let s_inv = match s.clone().try_inverse() {

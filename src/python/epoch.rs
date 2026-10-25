@@ -1,9 +1,9 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use pyo3::prelude::*;
 use crate::epoch::Epoch;
+use pyo3::prelude::*;
 
-#[pyclass(name="Epoch")]
+#[pyclass(name = "Epoch")]
 #[derive(Clone, Debug)]
 pub struct PyEpoch {
     pub inner: Epoch,
@@ -13,10 +13,10 @@ pub struct PyEpoch {
 impl PyEpoch {
     #[new]
     fn new(value: i64) -> PyEpoch {
-        PyEpoch{
-            inner: Epoch::new(value)
+        PyEpoch {
+            inner: Epoch::new(value),
         }
-    }  
+    }
 
     #[getter]
     fn value(&self) -> i64 {

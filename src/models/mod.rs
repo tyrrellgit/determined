@@ -5,24 +5,19 @@ pub mod ud;
 pub mod unscented;
 pub mod update;
 
-pub use traits::DefaultFromState;
-pub use traits::{ TransitionModel, MeasurementModel, UpdateModel };
-pub use traits::{ TransitionJacobian, MeasurementJacobian, InverseMeasurement };
 pub use linear::{
-    LinearTransition, LinearMeasurement, LinearUpdate,
-    LinearTransitionN, LinearMeasurementNM, LinearUpdateNM,
+    LinearMeasurement, LinearMeasurementNM, LinearTransition, LinearTransitionN, LinearUpdate,
+    LinearUpdateNM,
 };
 pub use nonlinear::{
-    NonLinearTransition, NonLinearMeasurement, NonLinearUpdate,
-    NonLinearTransitionN, NonLinearMeasurementNM, NonLinearUpdateNM,
+    NonLinearMeasurement, NonLinearMeasurementNM, NonLinearTransition, NonLinearTransitionN,
+    NonLinearUpdate, NonLinearUpdateNM,
 };
+pub use traits::DefaultFromState;
+pub use traits::{InverseMeasurement, MeasurementJacobian, TransitionJacobian};
+pub use traits::{MeasurementModel, TransitionModel, UpdateModel};
+pub use ud::{LinearUDUpdate, LinearUDUpdateNM, NonLinearUDUpdate, NonLinearUDUpdateNM, UDFactors};
 pub use unscented::{
-    UnscentedParams,
-    UnscentedTransition, UnscentedMeasurement, UnscentedUpdate,
-    UnscentedTransitionN, UnscentedMeasurementNM, UnscentedUpdateNM,
-};
-pub use ud::{
-    UDFactors,
-    LinearUDUpdate, NonLinearUDUpdate,
-    LinearUDUpdateNM, NonLinearUDUpdateNM,
+    UnscentedMeasurement, UnscentedMeasurementNM, UnscentedParams, UnscentedTransition,
+    UnscentedTransitionN, UnscentedUpdate, UnscentedUpdateNM,
 };

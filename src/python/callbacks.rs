@@ -5,15 +5,15 @@
 //! callables take the state value as a numpy array and the epoch as an int,
 //! and may return anything array-like (so autodiff libraries such as JAX work).
 
-use std::sync::{ Arc, Mutex };
+use std::sync::{Arc, Mutex};
 
+use numpy::{PyReadonlyArray2, PyReadonlyArrayDyn, ToPyArray};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::exceptions::{ PyTypeError, PyValueError };
-use pyo3::types::{ PyAny, PyDict };
-use numpy::{ PyReadonlyArray2, PyReadonlyArrayDyn, ToPyArray };
+use pyo3::types::{PyAny, PyDict};
 
 use crate::common::na;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
 use crate::python::arrays::to_dmatrix;
 
@@ -53,7 +53,9 @@ fn call_vector(
     let view = array.as_array();
     if view.len() != len {
         return Err(PyValueError::new_err(format!(
-            "{name}() returned {} elements, expected {len}", view.len())));
+            "{name}() returned {} elements, expected {len}",
+            view.len()
+        )));
     }
     Ok(na::DVector::<f64>::from_iterator(len, view.iter().copied()))
 }
@@ -69,12 +71,14 @@ fn call_matrix(
 ) -> PyResult<na::DMatrix<f64>> {
     let x = state.value.as_slice().to_pyarray(py);
     let result = as_f64_array(py, func.bind(py).call1((x, state.epoch.value))?)?;
-    let array: PyReadonlyArray2<f64> = result.extract().map_err(|_| {
-        PyValueError::new_err(format!("{name}() must return a 2D array"))
-    })?;
+    let array: PyReadonlyArray2<f64> = result
+        .extract()
+        .map_err(|_| PyValueError::new_err(format!("{name}() must return a 2D array")))?;
     if array.as_array().dim() != (nrows, ncols) {
         return Err(PyValueError::new_err(format!(
-            "{name}() returned shape {:?}, expected ({nrows}, {ncols})", array.as_array().dim())));
+            "{name}() returned shape {:?}, expected ({nrows}, {ncols})",
+            array.as_array().dim()
+        )));
     }
     Ok(to_dmatrix(array.as_array()))
 }
@@ -91,11 +95,10 @@ pub fn vector_model(
         if error.lock().unwrap().is_some() {
             return placeholder();
         }
-        Python::attach(|py| call_vector(py, &func, name, state, len))
-            .unwrap_or_else(|err| {
-                *error.lock().unwrap() = Some(err);
-                placeholder()
-            })
+        Python::attach(|py| call_vector(py, &func, name, state, len)).unwrap_or_else(|err| {
+            *error.lock().unwrap() = Some(err);
+            placeholder()
+        })
     }
 }
 
@@ -112,11 +115,12 @@ pub fn matrix_model(
         if error.lock().unwrap().is_some() {
             return placeholder();
         }
-        Python::attach(|py| call_matrix(py, &func, name, state, nrows, ncols))
-            .unwrap_or_else(|err| {
+        Python::attach(|py| call_matrix(py, &func, name, state, nrows, ncols)).unwrap_or_else(
+            |err| {
                 *error.lock().unwrap() = Some(err);
                 placeholder()
-            })
+            },
+        )
     }
 }
 

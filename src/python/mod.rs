@@ -11,11 +11,11 @@
 //! functions as Rust model closures, for the EKF and UKF), `filter` (method
 //! bodies shared by the filter classes) and `logging` (spdlog -> Python logging).
 
+pub mod algorithms;
 pub mod epoch;
-pub mod state;
 pub mod measurement;
 pub mod models;
-pub mod algorithms;
+pub mod state;
 
 pub mod arrays;
 pub mod callbacks;

@@ -1,6 +1,6 @@
-use pyo3::prelude::*;
-use numpy::{ PyArray1, PyArray2, ToPyArray, PyArrayMethods };
 use numpy::ndarray::ArrayView2;
+use numpy::{PyArray1, PyArray2, PyArrayMethods, ToPyArray};
+use pyo3::prelude::*;
 
 use crate::common::na;
 
@@ -18,7 +18,8 @@ pub fn to_dmatrix(array: ArrayView2<'_, f64>) -> na::DMatrix<f64> {
 /// nalgebra matrix -> numpy (C-order) array of the same shape.
 pub fn to_pymatrix<'py>(py: Python<'py>, matrix: &na::DMatrix<f64>) -> PyMatrix<'py> {
     // transpose so the column-major slice reads out in row-major order
-    matrix.transpose()
+    matrix
+        .transpose()
         .as_slice()
         .to_pyarray(py)
         .reshape([matrix.nrows(), matrix.ncols()])
@@ -32,7 +33,9 @@ pub fn check_shape(m: &na::DMatrix<f64>, shape: (usize, usize), name: &str) -> P
         Ok(())
     } else {
         Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "{name} must have shape {shape:?}, got {:?}", m.shape())))
+            "{name} must have shape {shape:?}, got {:?}",
+            m.shape()
+        )))
     }
 }
 
@@ -45,6 +48,8 @@ pub fn check_length(v: &na::DVector<f64>, len: usize, name: &str) -> PyResult<()
         Ok(())
     } else {
         Err(pyo3::exceptions::PyValueError::new_err(format!(
-            "{name} has {} elements, expected {len}", v.len())))
+            "{name} has {} elements, expected {len}",
+            v.len()
+        )))
     }
 }
