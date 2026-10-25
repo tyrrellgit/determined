@@ -55,14 +55,6 @@ where
         }
         LinearTransition { state, f, q, f_inv }
     }
-
-    fn f_inv(&self) -> na::OMatrix<f64, N, N> {
-        // getter for F inverse with default zero matrix
-        self.f_inv.clone().unwrap_or_else(|| {
-            let (r, c) = self.f.shape_generic();
-            na::OMatrix::<f64, N, N>::zeros_generic(r, c)
-        })
-    }
 }   
 
 impl<N> DefaultFromState for LinearTransition<N>
@@ -107,11 +99,16 @@ where
             }
         } else {
             // propagate backward
-            let f_inv = self.f_inv();
+            let Some(f_inv) = &self.f_inv else {
+                spdlog::warn!(
+                    "State transition matrix F is non-invertible; backward propagation will do nothing."
+                );
+                return &self.state;
+            };
             for _ in 0..delta.abs() {
                 let cov = state.covariance();
-                state.value = &f_inv * &state.value;
-                state.covariance = Some(&f_inv * (cov - &self.q) * f_inv.transpose());
+                state.value = f_inv * &state.value;
+                state.covariance = Some(f_inv * (cov - &self.q) * f_inv.transpose());
             }
         };
         state.epoch = *epoch;
