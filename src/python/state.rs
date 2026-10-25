@@ -7,7 +7,7 @@ use numpy::ToPyArray;
 use crate::common::na as na;
 use crate::python::epoch::PyEpoch;
 use crate::state::{State, StatePtr};
-use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix };
+use crate::python::arrays::{ PyVector, PyMatrix, to_dmatrix, to_pymatrix, check_square };
 
 
 #[pyclass(name="State")]
@@ -39,6 +39,9 @@ impl PyState {
         // ndarray -> nalgebra (single copy)
         to_dmatrix(cov.as_array())
     });
+    if let Some(cov) = &cov {
+        check_square(cov, vector.len(), "covariance")?;
+    }
         
         Ok(PyState {
             inner: State {
