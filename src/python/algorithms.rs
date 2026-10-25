@@ -84,21 +84,16 @@ macro_rules! py_filter {
 }
 
 // Kalman Filter
+/// Linear Kalman filter, computed in Rust.
+///
+/// f, q: (N, N) transition and process noise; h: (M, N) measurement matrix;
+/// r: (M, M) measurement noise. Returned states are live views of the filter state.
 #[pyclass(name="KalmanFilter")]
 pub struct PyKalmanFilter {
     core: FilterCore<KalmanFilterDyn>,
 }
 
 py_filter!(PyKalmanFilter {
-    /// KalmanFilter(state, *, f, q, h, r)
-    ///
-    /// f  state transition, shape (N, N)
-    /// q  process noise covariance, shape (N, N)
-    /// h  measurement matrix, shape (M, N)
-    /// r  measurement noise covariance, shape (M, M)
-    ///
-    /// All arguments after `state` are keyword-only. The returned states are
-    /// live views of the filter state.
     #[new]
     #[pyo3(signature = (state, *, f, q, h, r))]
     fn new(
@@ -128,22 +123,17 @@ py_filter!(PyKalmanFilter {
 
 
 // Extended Kalman Filter
+/// Extended Kalman filter: the maths in Rust, the model functions in Python.
+///
+/// f(x, t), h(x, t) and their Jacobians jac_f (N, N), jac_h (M, N); q (N, N) and
+/// r (M, M) noise; t is the integer epoch. Returned states are live views of the
+/// filter state.
 #[pyclass(name="ExtendedKalmanFilter")]
 pub struct PyExtendedKalmanFilter {
     core: FilterCore<ExtendedKalmanFilterDyn>,
 }
 
 py_filter!(PyExtendedKalmanFilter {
-    /// ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
-    ///
-    /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
-    /// jac_f(x, t) -> F  Jacobian of f, shape (N, N)
-    /// h(x, t) -> z      measurement function at epoch t, shape (M,)
-    /// jac_h(x, t) -> H  Jacobian of h, shape (M, N)
-    /// q, r              process (N, N) and measurement (M, M) noise
-    ///
-    /// `t` is the integer epoch value. All arguments after `state` are
-    /// keyword-only. The returned states are live views of the filter state.
     #[new]
     #[pyo3(signature = (state, *, f, jac_f, q, h, jac_h, r))]
     fn new(
@@ -187,29 +177,17 @@ py_filter!(PyExtendedKalmanFilter {
 
 
 // Unscented Kalman Filter
+/// Unscented Kalman filter: no Jacobians, f(x, t) and h(x, t) are evaluated at
+/// 2N + 1 sigma points.
+///
+/// q (N, N) and r (M, M) noise; alpha, beta, kappa: sigma point parameters. Needs a
+/// positive definite covariance. Returned states are live views of the filter state.
 #[pyclass(name="UnscentedKalmanFilter")]
 pub struct PyUnscentedKalmanFilter {
     core: FilterCore<UnscentedKalmanFilterDyn>,
 }
 
 py_filter!(PyUnscentedKalmanFilter {
-    /// UnscentedKalmanFilter(state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0)
-    ///
-    /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
-    /// h(x, t) -> z      measurement function at epoch t, shape (M,)
-    /// q, r              process (N, N) and measurement (M, M) noise
-    /// alpha, beta, kappa  scaled sigma point parameters (van der Merwe)
-    ///
-    /// No Jacobians are needed: `f` and `h` are evaluated at 2N + 1 sigma
-    /// points per step, so they must not keep state between calls. The
-    /// default parameters keep all sigma point weights non-negative.
-    ///
-    /// The state covariance must be strictly positive definite (and
-    /// kappa > -N): otherwise predict and update log an error and leave the
-    /// state unchanged.
-    ///
-    /// `t` is the integer epoch value. All arguments after `state` are
-    /// keyword-only. The returned states are live views of the filter state.
     #[new]
     #[pyo3(signature = (state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0))]
     fn new(
@@ -252,26 +230,14 @@ py_filter!(PyUnscentedKalmanFilter {
 
 
 // UD Kalman Filter
+/// Kalman filter in UD factorised form (P = U D U^T), with the same models as
+/// KalmanFilter. Returned states are live views of the filter state.
 #[pyclass(name="UDKalmanFilter")]
 pub struct PyUDKalmanFilter {
     core: FilterCore<UDKalmanFilterDyn>,
 }
 
 py_filter!(PyUDKalmanFilter {
-    /// UDKalmanFilter(state, *, f, q, h, r)
-    ///
-    /// The Kalman filter in UD factorised form: the covariance is held as
-    /// P = U D U^T and the factors are propagated and updated directly, which
-    /// keeps P symmetric positive semi-definite. Same models as KalmanFilter:
-    ///
-    /// f  state transition, shape (N, N)
-    /// q  process noise covariance, shape (N, N)
-    /// h  measurement matrix, shape (M, N)
-    /// r  measurement noise covariance, shape (M, M); decorrelated if not diagonal
-    ///
-    /// All arguments after `state` are keyword-only. The returned states are
-    /// live views of the filter state, carrying P = U D U^T. Predicting
-    /// backwards is not supported.
     #[new]
     #[pyo3(signature = (state, *, f, q, h, r))]
     fn new(
@@ -301,27 +267,14 @@ py_filter!(PyUDKalmanFilter {
 
 
 // UD Extended Kalman Filter
+/// Extended Kalman filter in UD factorised form (P = U D U^T), with the same models
+/// as ExtendedKalmanFilter. Returned states are live views of the filter state.
 #[pyclass(name="UDExtendedKalmanFilter")]
 pub struct PyUDExtendedKalmanFilter {
     core: FilterCore<UDExtendedKalmanFilterDyn>,
 }
 
 py_filter!(PyUDExtendedKalmanFilter {
-    /// UDExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
-    ///
-    /// The Extended Kalman filter in UD factorised form (P = U D U^T, factors
-    /// propagated and updated directly). Same models as ExtendedKalmanFilter:
-    ///
-    /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
-    /// jac_f(x, t) -> F  Jacobian of f, shape (N, N)
-    /// h(x, t) -> z      measurement function at epoch t, shape (M,)
-    /// jac_h(x, t) -> H  Jacobian of h, shape (M, N)
-    /// q, r              process (N, N) and measurement (M, M) noise; r is
-    ///                   decorrelated if not diagonal
-    ///
-    /// `t` is the integer epoch value. All arguments after `state` are
-    /// keyword-only. The returned states are live views of the filter state,
-    /// carrying P = U D U^T.
     #[new]
     #[pyo3(signature = (state, *, f, jac_f, q, h, jac_h, r))]
     fn new(
