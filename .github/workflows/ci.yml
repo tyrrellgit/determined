@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+
+      - name: Rust tests
+        run: nix develop .#ci --command cargo test
+
+      - name: Rust examples
+        run: |
+          nix develop .#ci --command bash -euo pipefail -c '
+            for f in examples/*.rs; do
+              e=$(basename "$f" .rs)
+              echo "== $e"
+              cargo run --quiet --example "$e"
+            done'
+
+      - name: Build Python bindings
+        run: |
+          nix develop .#ci --command bash -euo pipefail -c '
+            python -m venv --system-site-packages .venv
+            . .venv/bin/activate
+            maturin develop --release'
+
+      - name: Python tests
+        run: nix develop .#ci --command bash -euo pipefail -c '. .venv/bin/activate && python -m pytest tests_py'
+
+      - name: Python examples
+        run: |
+          nix develop .#ci --command bash -euo pipefail -c '
+            . .venv/bin/activate
+            cd examples
+            for f in *.py; do
+              # renders a video and needs manim, which the CI shell leaves out
+              [ "$f" = manim_two_mass_spring_damper.py ] && continue
+              echo "== $f"
+              python "$f"
+            done'
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+
+      - name: Clippy
+        run: nix develop .#ci --command cargo clippy --all-targets
+
+      # the code has not been run through rustfmt yet; report only for now
+      - name: Rustfmt
+        continue-on-error: true
+        run: nix develop .#ci --command cargo fmt --check
