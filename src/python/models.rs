@@ -98,12 +98,13 @@ impl TransitionModel<na::Dyn> for PyTransitionModel {
                 .extract()
                 .expect("state() must return <State>");
             
-            let _state = result_state.inner.read().unwrap();
+            // copy out first: the returned state may share this state's lock
+            let _state = result_state.inner.read().unwrap().clone();
 
             {   // lock and update state
                 let mut state = self.state.inner.write().unwrap();
-                state.value = _state.value.clone();
-                state.covariance = _state.covariance.clone();
+                state.value = _state.value;
+                state.covariance = _state.covariance;
                 state.epoch = *epoch;
             }
 
@@ -379,13 +380,11 @@ impl UpdateModel<na::Dyn, na::Dyn> for PyUpdateModel {
                 .extract()
                 .expect("apply() must return <State>");
             
-            let _state = result_state.inner.read().unwrap();
-            
+            // copy out first: the returned state may share this state's lock
+            let _state = result_state.inner.read().unwrap().clone();
+
             {   // lock and update state
-                let mut state = self.state.inner.write().unwrap();
-                state.value = _state.value.clone();
-                state.covariance = _state.covariance.clone();
-                state.epoch = _state.epoch;
+                *self.state.inner.write().unwrap() = _state;
             }
 
         });
