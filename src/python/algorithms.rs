@@ -16,6 +16,9 @@
 //! call back into Python only for the model functions (see `callbacks`). `CustomFilter` runs
 //! whatever update your Python `UpdateModel` implements.
 //!
+//! Each class holds a `FilterCore` (see `filter`) around its Rust filter and
+//! forwards `predict`/`update`/`state`/`reset` to it.
+//!
 //! States returned by `predict`/`update`/`state` are live, zero-copy views of
 //! the filter's internal state, not snapshots: they change on the next call.
 //! Copy the arrays (`state.value.copy()`) if you need to keep one.
@@ -28,7 +31,6 @@ use crate::algorithms::{
     KalmanFilterT, KalmanFilterDyn, ExtendedKalmanFilterDyn, UnscentedKalmanFilterDyn,
     UDKalmanFilterDyn, UDExtendedKalmanFilterDyn,
 };
-use crate::filter::Filter;
 use crate::models::{
     LinearMeasurement, LinearTransition, LinearUpdate,
     NonLinearMeasurement, NonLinearTransition, NonLinearUpdate,
@@ -40,19 +42,54 @@ use crate::python::epoch::PyEpoch;
 use crate::python::state::PyState;
 use crate::python::measurement::PyObservation;
 use crate::python::models::PyUpdateModel;
-use crate::python::arrays::{ to_dmatrix, check_shape, check_square, check_length };
-use crate::python::callbacks::{ ErrorSlot, check_callable, guarded, vector_model, matrix_model };
+use crate::python::arrays::{ to_dmatrix, check_shape, check_square };
+use crate::python::callbacks::{ ErrorSlot, check_callable, vector_model, matrix_model };
+use crate::python::filter::FilterCore;
 
+
+
+/// The `#[pymethods]` of a Python filter class: the constructor given, plus
+/// the methods every filter shares, forwarded to the class's
+/// `core: FilterCore<_>`.
+macro_rules! py_filter {
+    ($py:ident { $($constructor:tt)* }) => {
+        #[pymethods]
+        impl $py {
+            $($constructor)*
+
+            fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
+                self.core.predict(epoch)
+            }
+
+            fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
+                self.core.update(observation)
+            }
+
+            #[getter]
+            fn get_state(&self) -> PyState {
+                self.core.get_state()
+            }
+
+            #[setter]
+            fn set_state(&self, state: PyState) -> PyResult<()> {
+                self.core.set_state(&state)
+            }
+
+            /// Zero the state and reset the covariance to identity.
+            fn reset(&mut self) {
+                self.core.reset();
+            }
+        }
+    };
+}
 
 // Kalman Filter
 #[pyclass(name="KalmanFilter")]
 pub struct PyKalmanFilter {
-    filter: KalmanFilterDyn,
-    state: PyState,
+    core: FilterCore<KalmanFilterDyn>,
 }
 
-#[pymethods]
-impl PyKalmanFilter {
+py_filter!(PyKalmanFilter {
     /// KalmanFilter(state, *, f, q, h, r)
     ///
     /// f  state transition, shape (N, N)
@@ -85,45 +122,18 @@ impl PyKalmanFilter {
             LinearMeasurement::new(h, r),
             LinearTransition::new(state.inner.clone(), f, q),
         ));
-        Ok(PyKalmanFilter { filter, state })
+        Ok(PyKalmanFilter { core: FilterCore::new(filter, state, None, Some(m)) })
     }
-
-    fn predict(&mut self, epoch: &PyEpoch) -> PyState {
-        PyState { inner: self.filter.predict(&epoch.inner) }
-    }
-
-    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
-        check_length(&observation.inner.value, self.filter.update.measurement.h.nrows(), "observation")?;
-        Ok(PyState { inner: self.filter.update(&observation.inner) })
-    }
-
-    #[getter]
-    fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
-    }
-
-    #[setter]
-    fn set_state(&self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
-    }
-
-    /// Zero the state and reset the covariance to identity.
-    fn reset(&mut self) {
-        self.filter.reset();
-    }
-}
+});
 
 
 // Extended Kalman Filter
 #[pyclass(name="ExtendedKalmanFilter")]
 pub struct PyExtendedKalmanFilter {
-    filter: ExtendedKalmanFilterDyn,
-    state: PyState,
-    error: ErrorSlot,
+    core: FilterCore<ExtendedKalmanFilterDyn>,
 }
 
-#[pymethods]
-impl PyExtendedKalmanFilter {
+py_filter!(PyExtendedKalmanFilter {
     /// ExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
     ///
     /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
@@ -171,49 +181,18 @@ impl PyExtendedKalmanFilter {
         );
         let filter = ExtendedKalmanFilterDyn::new(NonLinearUpdate::new(measurement, transition));
 
-        Ok(PyExtendedKalmanFilter { filter, state, error })
+        Ok(PyExtendedKalmanFilter { core: FilterCore::new(filter, state, Some(error), Some(m)) })
     }
-
-    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.predict(&epoch.inner))?;
-        Ok(PyState { inner })
-    }
-
-    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
-        check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.update(&observation.inner))?;
-        Ok(PyState { inner })
-    }
-
-    #[getter]
-    fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
-    }
-
-    #[setter]
-    fn set_state(&self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
-    }
-
-    /// Zero the state and reset the covariance to identity.
-    fn reset(&mut self) {
-        self.filter.reset();
-    }
-}
+});
 
 
 // Unscented Kalman Filter
 #[pyclass(name="UnscentedKalmanFilter")]
 pub struct PyUnscentedKalmanFilter {
-    filter: UnscentedKalmanFilterDyn,
-    state: PyState,
-    error: ErrorSlot,
+    core: FilterCore<UnscentedKalmanFilterDyn>,
 }
 
-#[pymethods]
-impl PyUnscentedKalmanFilter {
+py_filter!(PyUnscentedKalmanFilter {
     /// UnscentedKalmanFilter(state, *, f, q, h, r, alpha=1.0, beta=2.0, kappa=0.0)
     ///
     /// f(x, t) -> x'     one-step propagation from epoch t to t + 1, shape (N,)
@@ -224,6 +203,10 @@ impl PyUnscentedKalmanFilter {
     /// No Jacobians are needed: `f` and `h` are evaluated at 2N + 1 sigma
     /// points per step, so they must not keep state between calls. The
     /// default parameters keep all sigma point weights non-negative.
+    ///
+    /// The state covariance must be strictly positive definite (and
+    /// kappa > -N): otherwise predict and update log an error and leave the
+    /// state unchanged.
     ///
     /// `t` is the integer epoch value. All arguments after `state` are
     /// keyword-only. The returned states are live views of the filter state.
@@ -263,48 +246,18 @@ impl PyUnscentedKalmanFilter {
         );
         let filter = UnscentedKalmanFilterDyn::new(UnscentedUpdate::new(measurement, transition));
 
-        Ok(PyUnscentedKalmanFilter { filter, state, error })
+        Ok(PyUnscentedKalmanFilter { core: FilterCore::new(filter, state, Some(error), Some(m)) })
     }
-
-    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.predict(&epoch.inner))?;
-        Ok(PyState { inner })
-    }
-
-    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
-        check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.update(&observation.inner))?;
-        Ok(PyState { inner })
-    }
-
-    #[getter]
-    fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
-    }
-
-    #[setter]
-    fn set_state(&self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
-    }
-
-    /// Zero the state and reset the covariance to identity.
-    fn reset(&mut self) {
-        self.filter.reset();
-    }
-}
+});
 
 
 // UD Kalman Filter
 #[pyclass(name="UDKalmanFilter")]
 pub struct PyUDKalmanFilter {
-    filter: UDKalmanFilterDyn,
-    state: PyState,
+    core: FilterCore<UDKalmanFilterDyn>,
 }
 
-#[pymethods]
-impl PyUDKalmanFilter {
+py_filter!(PyUDKalmanFilter {
     /// UDKalmanFilter(state, *, f, q, h, r)
     ///
     /// The Kalman filter in UD factorised form: the covariance is held as
@@ -342,45 +295,18 @@ impl PyUDKalmanFilter {
             LinearMeasurement::new(h, r),
             LinearTransition::new(state.inner.clone(), f, q),
         ));
-        Ok(PyUDKalmanFilter { filter, state })
+        Ok(PyUDKalmanFilter { core: FilterCore::new(filter, state, None, Some(m)) })
     }
-
-    fn predict(&mut self, epoch: &PyEpoch) -> PyState {
-        PyState { inner: self.filter.predict(&epoch.inner) }
-    }
-
-    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
-        check_length(&observation.inner.value, self.filter.update.measurement.h.nrows(), "observation")?;
-        Ok(PyState { inner: self.filter.update(&observation.inner) })
-    }
-
-    #[getter]
-    fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
-    }
-
-    #[setter]
-    fn set_state(&self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
-    }
-
-    /// Zero the state and reset the covariance to identity.
-    fn reset(&mut self) {
-        self.filter.reset();
-    }
-}
+});
 
 
 // UD Extended Kalman Filter
 #[pyclass(name="UDExtendedKalmanFilter")]
 pub struct PyUDExtendedKalmanFilter {
-    filter: UDExtendedKalmanFilterDyn,
-    state: PyState,
-    error: ErrorSlot,
+    core: FilterCore<UDExtendedKalmanFilterDyn>,
 }
 
-#[pymethods]
-impl PyUDExtendedKalmanFilter {
+py_filter!(PyUDExtendedKalmanFilter {
     /// UDExtendedKalmanFilter(state, *, f, jac_f, q, h, jac_h, r)
     ///
     /// The Extended Kalman filter in UD factorised form (P = U D U^T, factors
@@ -433,37 +359,9 @@ impl PyUDExtendedKalmanFilter {
         );
         let filter = UDExtendedKalmanFilterDyn::new(NonLinearUDUpdate::new(measurement, transition));
 
-        Ok(PyUDExtendedKalmanFilter { filter, state, error })
+        Ok(PyUDExtendedKalmanFilter { core: FilterCore::new(filter, state, Some(error), Some(m)) })
     }
-
-    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.predict(&epoch.inner))?;
-        Ok(PyState { inner })
-    }
-
-    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
-        check_length(&observation.inner.value, self.filter.update.measurement.r.nrows(), "observation")?;
-        let inner = guarded(&mut self.filter, &self.state.inner, &self.error,
-            |filter| filter.update(&observation.inner))?;
-        Ok(PyState { inner })
-    }
-
-    #[getter]
-    fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
-    }
-
-    #[setter]
-    fn set_state(&self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
-    }
-
-    /// Zero the state and reset the covariance to identity.
-    fn reset(&mut self) {
-        self.filter.reset();
-    }
-}
+});
 
 
 // Custom Filter
@@ -472,8 +370,7 @@ impl PyUDExtendedKalmanFilter {
 /// your model implements. See `KalmanFilter` for the Rust-computed filter.
 #[pyclass(name="CustomFilter")]
 pub struct PyCustomFilter {
-    filter: KalmanFilterT<na::Dyn, na::Dyn, PyUpdateModel>,
-    state: PyState,
+    core: FilterCore<KalmanFilterT<na::Dyn, na::Dyn, PyUpdateModel>>,
 }
 
 #[pymethods]
@@ -482,37 +379,38 @@ impl PyCustomFilter {
     pub fn new(update: PyRef<'_, PyUpdateModel>) -> Self {
         let update = update.clone();
         let state = update.state.clone();
-        PyCustomFilter {
-            filter: KalmanFilterT::new(update),
-            state,
-        }
+        // the measurement is a Python object, so its size is not known here
+        PyCustomFilter { core: FilterCore::new(KalmanFilterT::new(update), state, None, None) }
     }
 
-    fn predict(&mut self, epoch: &PyEpoch) -> PyState {
-        PyState { inner: self.filter.predict(&epoch.inner) }
+    fn predict(&mut self, epoch: &PyEpoch) -> PyResult<PyState> {
+        self.core.predict(epoch)
     }
 
-    fn update(&mut self, observation: &PyObservation) -> PyState {
-        PyState { inner: self.filter.update(&observation.inner) }
+    fn update(&mut self, observation: &PyObservation) -> PyResult<PyState> {
+        self.core.update(observation)
     }
 
     #[getter]
     fn get_state(&self) -> PyState {
-        PyState { inner: self.filter.state() }
+        self.core.get_state()
     }
 
     #[setter]
-    fn set_state(&mut self, state: PyState) -> PyResult<()> {
-        self.state.assign(&state)
+    fn set_state(&self, state: PyState) -> PyResult<()> {
+        self.core.set_state(&state)
     }
 
-    /// Calls the update model's `reset()`, if it has one. The state belongs to
-    /// your models, so the filter does not reset it itself.
-    fn reset(&mut self) {
-        Python::attach(|py| {
-            if self.filter.update.model.bind(py).call_method0("reset").is_err() {
-                spdlog::warn!("No update.reset() method found.");
-            }
-        });
+    /// Calls the update model's `reset()`, if it has one; errors it raises
+    /// propagate. The state belongs to your models, so the filter does not
+    /// reset it itself.
+    fn reset(&mut self, py: Python<'_>) -> PyResult<()> {
+        let model = self.core.filter.update.model.bind(py);
+        if !model.hasattr("reset")? {
+            spdlog::warn!("No update.reset() method found.");
+            return Ok(());
+        }
+        model.call_method0("reset")?;
+        Ok(())
     }
 }
