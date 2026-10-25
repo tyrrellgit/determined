@@ -15,7 +15,7 @@ class LinearTransition:
         # state / covariance update
         value = self.f @ self._state.value
         cov = self.f @ self._state.covariance @ self.f.T + self.q
-        self._state = dt.State(value, cov, epoch)
+        self._state = dt.State(value, covariance=cov, epoch=epoch)
 
         return self._state
     
@@ -26,14 +26,13 @@ value = np.array([1.0, 0.0])
 cov = np.eye(value.size)
 
 epoch = dt.Epoch(0)
-state = dt.State(value, cov, epoch)
-initial_state = dt.State(value, cov, epoch)
+state = dt.State(value, covariance=cov, epoch=epoch)
 
 f = np.diag(np.array([1.5, 2.0]))
 q = np.eye(f.shape[0])
 
-model = LinearTransition(f, q, initial_state)
-transition = dt.TransitionModel(model, state)
+model = LinearTransition(f, q, state)
+transition = dt.TransitionModel(model, state=state)
 
 if __name__ == "__main__":
     for n in range(2):

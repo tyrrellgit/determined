@@ -2,9 +2,9 @@
 //! observation. `State<R,C>` is a thin container that carries a `SMatrix` and
 //! a simple `epoch` value used for timestamping.
 
+use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::fmt;
 
 use crate::common::{Composable, na};
 use crate::epoch::Epoch;
@@ -13,11 +13,11 @@ use crate::epoch::Epoch;
 pub struct State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>
-        + na::allocator::Allocator<T, T>,
+    na::DefaultAllocator:
+        na::base::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
 {
-    pub value: na::Matrix<f64, T, na::U1, na::Owned<f64, T, na::U1>>,
-    pub covariance: Option<na::Matrix<f64, T, T, na::Owned<f64, T, T>>>,
+    pub value: na::OVector<f64, T>,
+    pub covariance: Option<na::OMatrix<f64, T, T>>,
     pub epoch: Epoch,
 }
 
@@ -28,8 +28,7 @@ pub type StatePtr<T> = Arc<RwLock<State<T>>>;
 impl<T> State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
-        + na::allocator::Allocator<T, T>,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
 {
     pub fn new(value: Vec<f64>, covariance: Vec<Vec<f64>>, epoch: Epoch) -> Self {
         let dim = value.len();
@@ -50,10 +49,7 @@ where
 
     pub fn zeros(size: usize, epoch: Epoch) -> Self {
         State {
-            value: na::Matrix::<f64, T, na::U1, _>::zeros_generic(
-                T::from_usize(size),
-                na::U1,
-            ),
+            value: na::Matrix::<f64, T, na::U1, _>::zeros_generic(T::from_usize(size), na::U1),
             covariance: Some(na::Matrix::<f64, T, T, _>::zeros_generic(
                 T::from_usize(size),
                 T::from_usize(size),
@@ -84,8 +80,7 @@ where
 impl<T> Default for State<T>
 where
     T: na::Dim + na::DimName,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
-        + na::allocator::Allocator<T, T>,
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
 {
     fn default() -> Self {
         Self {
@@ -99,9 +94,8 @@ where
 impl<T> Composable for State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::allocator::Allocator<T, na::U1>
-        + na::allocator::Allocator<T, T>,
-{   
+    na::DefaultAllocator: na::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
+{
     type Output = State<T>;
 
     fn add(self, other: Self) -> Self {
@@ -116,8 +110,8 @@ where
 impl<T> fmt::Display for State<T>
 where
     T: na::Dim,
-    na::DefaultAllocator: na::base::allocator::Allocator<T, na::U1>
-        + na::allocator::Allocator<T, T>,
+    na::DefaultAllocator:
+        na::base::allocator::Allocator<T, na::U1> + na::allocator::Allocator<T, T>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Format `value`, `covariance`, and `epoch` as desired

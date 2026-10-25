@@ -6,13 +6,18 @@ readme = "README.md"
 
 [dependencies]
 spdlog-rs = "0.4"
-pyo3 = { version = "0.27.2", features = ["extension-module"] }
+pyo3 = "0.27.2"
 numpy = "0.27.1"
 ndarray = "0.17.1"
 nalgebra = "0.33.2"
 statrs = { version = "0.18.0", features = [ "rand" ] }
 rand = "0.8.5"
 rand_distr = "0.4.3"
+
+[features]
+# Enabled by maturin (see pyproject.toml) when building the Python wheel.
+# Left off by default so `cargo test` / `cargo run --example` can link libpython.
+extension-module = ["pyo3/extension-module"]
 
 [lib]
 name = "determined"
