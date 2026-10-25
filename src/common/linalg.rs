@@ -3,9 +3,11 @@ use na::allocator::Allocator;
 
 /// Moore-Penrose pseudo-inverse of a full-rank matrix.
 ///
-/// Uses the left inverse `(A^T A)^-1 A^T` when `A` has full column rank (tall
-/// or square), otherwise the right inverse `A^T (A A^T)^-1` when it has full
-/// row rank (wide). Returns `None` if `A` is rank deficient.
+/// Uses the left inverse `(A^T A)^-1 A^T` for a tall or square `A` (full
+/// column rank) and the right inverse `A^T (A A^T)^-1` for a wide `A` (full
+/// row rank). The choice is made by shape: for a wide `A`, `A^T A` is singular
+/// but can still be inverted numerically because of rounding, giving garbage.
+/// Returns `None` if `A` is rank deficient.
 pub fn moore_penrose_inverse<T, R, C>(a: &na::OMatrix<T, R, C>) -> Option<na::OMatrix<T, C, R>>
 where
     T: na::RealField,
@@ -14,11 +16,13 @@ where
     na::DefaultAllocator: Allocator<R, C> + Allocator<C, R> + Allocator<C, C> + Allocator<R, R>,
 {
     let a_t = a.transpose();
-    if let Some(ata_inv) = (&a_t * a).try_inverse() {
-        return Some(ata_inv * a_t);
+    if a.nrows() >= a.ncols() {
+        let ata_inv = (&a_t * a).try_inverse()?;
+        Some(ata_inv * a_t)
+    } else {
+        let aat_inv = (a * &a_t).try_inverse()?;
+        Some(a_t * aat_inv)
     }
-    let aat_inv = (a * &a_t).try_inverse()?;
-    Some(a_t * aat_inv)
 }
 
 /// UD decomposition `M = U D U^T` of a symmetric positive semi-definite
