@@ -104,7 +104,8 @@ where
         for k in (0..n).rev() {
             // weighted norm of the (already orthogonalised) row k
             let dk: f64 = (0..n).map(|j| a[(k, j)] * self.d[j] * a[(k, j)] + b[(k, j)] * dq[j] * b[(k, j)]).sum();
-            d[k] = dk;
+            // a weighted sum of squares: negative only through rounding
+            d[k] = dk.max(0.0);
             if dk <= 0.0 {
                 continue;
             }
@@ -128,7 +129,7 @@ where
     /// with the modified Agee-Turner update (§III, Appendix B), after
     /// decorrelating `r` if it is not diagonal (Appendix D). Returns the state
     /// correction, or `None` (logged, factors unchanged) if an innovation
-    /// variance is not positive.
+    /// variance is not positive or the factors are not positive semi-definite.
     fn update<M>(
         &mut self,
         h: &na::OMatrix<f64, M, N>,
@@ -166,25 +167,50 @@ where
 
             let mut k = na::OVector::<f64, N>::zeros_generic(nd, na::Const::<1>);
             k[0] = v[0];
-            let mut alpha = r[i] + v[0] * w[0];
-            if alpha <= 0.0 {
+
+            // alpha_j = r + sum_{l <= j} d_l w_l^2 is the innovation variance
+            // accumulated over the first j states. It is zero for a perfect
+            // measurement (r = 0) of states not reached yet; the updates take
+            // the limit for that case. A negative alpha means r or the factors
+            // are not positive semi-definite.
+            let invalid = || {
                 spdlog::error!(
-                    "Invalid update: innovation variance is not positive; state will not be updated."
+                    "Invalid update: measurement noise or covariance factors are not positive semi-definite; state will not be updated."
                 );
-                return None;
+                None
+            };
+            let mut alpha = r[i] + v[0] * w[0];
+            if alpha < 0.0 {
+                return invalid();
             }
-            d[0] = r[i] * d[0] / alpha;
+            if alpha > 0.0 {
+                d[0] = r[i] * d[0] / alpha;
+            }
 
             for j in 1..n {
                 let alpha_prev = alpha;
                 alpha = alpha_prev + v[j] * w[j];
-                d[j] = d[j] * alpha_prev / alpha;
-                let lambda = -w[j] / alpha_prev;
+                if alpha < 0.0 {
+                    return invalid();
+                }
+                if alpha > 0.0 {
+                    d[j] = d[j] * alpha_prev / alpha;
+                }
+                // alpha_prev = 0 only when the gain so far (k) is zero, so the
+                // value of lambda does not matter then
+                let lambda = if alpha_prev > 0.0 { -w[j] / alpha_prev } else { 0.0 };
                 for row in 0..n {
                     let u_old = u[(row, j)];
                     u[(row, j)] = u_old + lambda * k[row];
                     k[row] += v[j] * u_old;
                 }
+            }
+
+            if alpha <= 0.0 {
+                spdlog::error!(
+                    "Invalid update: innovation variance is not positive; state will not be updated."
+                );
+                return None;
             }
 
             // gain K = k / alpha
