@@ -104,3 +104,24 @@ fn test_backward_predict_with_singular_transition() {
     assert_eq!(backward.covariance(), forward.covariance());
     assert_eq!(backward.epoch, Epoch::new(2));
 }
+
+/// `inverse()` is `None` when a model has no inverse, at any dimension type.
+#[test]
+fn test_inverse_measurement_is_optional() {
+    let obs = Observation { value: na::SVector::<f64, 1>::new(2.0), epoch: Epoch::new(1) };
+
+    // full rank wide H: the right inverse
+    let wide = LinearMeasurementNM::<2, 1>::new(na::SMatrix::<f64, 1, 2>::new(0.7, 0.9), na::SMatrix::identity());
+    let x = wide.inverse(&obs).expect("full rank H has a pseudo-inverse");
+    assert!(((0.7 * x.value[0] + 0.9 * x.value[1]) - 2.0).abs() < 1e-12);
+
+    // rank deficient H: no inverse
+    let deficient = LinearMeasurementNM::<2, 1>::new(na::SMatrix::<f64, 1, 2>::zeros(), na::SMatrix::identity());
+    assert!(deficient.inverse(&obs).is_none());
+
+    // nonlinear without with_inverse, runtime sized (used to return a 0-length state)
+    let nonlinear = NonLinearMeasurement::<na::Dyn, na::Dyn>::new(
+        Box::new(|s| s.value.clone()), Box::new(|_| na::DMatrix::identity(2, 2)), na::DMatrix::identity(2, 2));
+    let dyn_obs = Observation { value: na::DVector::from_element(2, 1.0), epoch: Epoch::new(0) };
+    assert!(nonlinear.inverse(&dyn_obs).is_none());
+}

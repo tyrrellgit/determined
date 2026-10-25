@@ -225,3 +225,32 @@ fn test_ud_perfect_measurement() {
     assert!(close(&b.covariance(), &a.covariance()), "{} vs {}", b.covariance(), a.covariance());
     assert!(ud.update.factors.d.iter().all(|d| d.is_finite() && *d >= 0.0));
 }
+
+/// Q is factorised once and reused, but a Q changed between steps
+/// (non-stationary process noise) is picked up.
+#[test]
+fn test_ud_follows_changed_process_noise() {
+    let f = na::SMatrix::<f64, 3, 3>::identity();
+    let h = na::SMatrix::<f64, 2, 3>::new(1.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+    let r = na::SMatrix::<f64, 2, 2>::identity() * 0.1;
+    let q1 = na::SMatrix::<f64, 3, 3>::identity() * 0.01;
+    let q2 = na::SMatrix::<f64, 3, 3>::new(0.5, 0.1, 0.0, 0.1, 0.3, 0.0, 0.0, 0.0, 0.2);
+
+    let mut kf = KalmanFilterNM::new(LinearUpdateNM::<3, 2>::new(
+        LinearMeasurementNM::<3, 2>::new(h, r), LinearTransitionN::<3>::new(state3().ptr(), f, q1)));
+    let mut ud = UDKalmanFilterNM::new(LinearUDUpdateNM::<3, 2>::new(
+        LinearMeasurementNM::<3, 2>::new(h, r), LinearTransitionN::<3>::new(state3().ptr(), f, q1)));
+
+    for t in 1..=6 {
+        if t == 4 {
+            kf.update.transition.q = q2;
+            ud.update.transition.q = q2;
+        }
+        let obs = Observation { value: na::SVector::<f64, 2>::new(0.1 * t as f64, 0.2), epoch: Epoch::new(t) };
+        let a = kf.update(&obs);
+        let b = ud.update(&obs);
+        let (a, b) = (a.read().unwrap(), b.read().unwrap());
+        assert!(close(&b.value, &a.value), "t={}", t);
+        assert!(close(&b.covariance(), &a.covariance()), "t={}", t);
+    }
+}

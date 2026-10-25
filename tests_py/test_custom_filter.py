@@ -61,3 +61,18 @@ class TestAlgorithm(unittest.TestCase):
     def test_apply(self):
         new_state = self.algorithm.update(self.obs)
         assert isinstance(new_state, dt.State), "state should be dt.State"
+
+    def test_reset_without_reset_method_warns(self):
+        with self.assertLogs("determined", level="WARNING") as logs:
+            self.algorithm.reset()
+        self.assertIn("No update.reset()", logs.output[0])
+
+    def test_reset_error_propagates(self):
+        class Failing(LinearUpdate):
+            def reset(self):
+                raise RuntimeError("reset failed")
+
+        update = dt.UpdateModel(Failing(self.transition, self.measurement),
+                                transition=self.transition, measurement=self.measurement)
+        with self.assertRaises(RuntimeError):
+            dt.CustomFilter(update).reset()

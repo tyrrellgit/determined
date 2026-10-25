@@ -8,7 +8,8 @@
 //!   `UDKalmanFilter`, `UDExtendedKalmanFilter`, `CustomFilter`
 //!
 //! plus binding helpers: `arrays` (numpy <-> nalgebra), `callbacks` (Python
-//! functions as Rust model closures, for the EKF and UKF) and `logging` (spdlog -> Python logging).
+//! functions as Rust model closures, for the EKF and UKF), `filter` (method
+//! bodies shared by the filter classes) and `logging` (spdlog -> Python logging).
 
 pub mod epoch;
 pub mod state;
@@ -18,6 +19,7 @@ pub mod algorithms;
 
 pub mod arrays;
 pub mod callbacks;
+pub mod filter;
 pub mod logging;
 
 use pyo3::prelude::*;

@@ -42,3 +42,13 @@ class TestMeasurementModel(unittest.TestCase):
 
     def test_noise(self):
         np.testing.assert_array_equal(self.measurement.noise(), self.model.r)
+
+    def test_inverse_may_be_none(self):
+        class NoInverse:
+            def projection(self, state): return dt.Observation(state.value, epoch=state.epoch)
+            def inverse(self, observation): return None
+            def noise(self): return np.eye(2)
+
+        measurement = dt.MeasurementModel(NoInverse())
+        obs = measurement.projection(self.state)
+        self.assertIsNone(measurement.inverse(obs))

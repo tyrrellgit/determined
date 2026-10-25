@@ -157,7 +157,12 @@ fn test_unscented_measurement_noise_and_inverse() {
 
     assert_eq!(measurement.noise(), r);
     let obs = Observation { value: na::SVector::<f64, 1>::new(3.0), epoch: Epoch::new(2) };
-    let x = measurement.inverse(&obs);
+    let x = measurement.inverse(&obs).expect("an inverse was supplied");
     assert_eq!(x.value, na::SVector::<f64, 2>::new(3.0, 0.0));
     assert_eq!(x.epoch, Epoch::new(2));
+
+    // without with_inverse there is no inverse
+    let plain = UnscentedMeasurementNM::<2, 1>::new(
+        Box::new(|s| na::SVector::<f64, 1>::new(s.value[0])), r);
+    assert!(plain.inverse(&obs).is_none());
 }
