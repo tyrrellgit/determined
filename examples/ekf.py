@@ -1,0 +1,40 @@
+"""Extended Kalman filter tracking a static 2D target from range-only measurements.
+
+The model functions take the state value `x` and the integer epoch `t`, and
+return plain numpy arrays, so the Jacobians could equally come from an autodiff
+library, e.g. `jac_h = jax.jacfwd(h)` (which differentiates `x`, not `t`).
+"""
+import numpy as np
+
+import determined as dt
+
+# initial guess (2, 2) with a wide covariance; the target is really at (3, 4)
+state = dt.State(np.array([2.0, 2.0]), covariance=np.eye(2) * 4.0, epoch=dt.Epoch(0))
+
+
+def f(x, t):
+    return x                      # static target
+
+
+def jac_f(x, t):
+    return np.eye(2)
+
+
+def h(x, t):
+    return np.array([np.linalg.norm(x)])
+
+
+def jac_h(x, t):
+    return (x / np.linalg.norm(x))[None, :]
+
+
+ekf = dt.ExtendedKalmanFilter(
+    state,
+    f=f, jac_f=jac_f, q=np.zeros((2, 2)),
+    h=h, jac_h=jac_h, r=np.array([[0.01]]),
+)
+
+for t in range(1, 6):
+    ekf.predict(dt.Epoch(t))
+    estimate = ekf.update(dt.Observation(np.array([5.0]), epoch=dt.Epoch(t)))
+    print(f"t={t} x={estimate.value} range={np.linalg.norm(estimate.value):.4f}")

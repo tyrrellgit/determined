@@ -14,7 +14,7 @@ class TestTransisionModel(unittest.TestCase):
         cls.cov = np.eye(cls.value.size)
 
         cls.epoch = dt.Epoch(0)
-        cls.state = dt.State(cls.value, cls.cov, cls.epoch)
+        cls.state = dt.State(cls.value, covariance=cls.cov, epoch=cls.epoch)
 
         f = np.diag(np.array([2.0, 1.5]))
         q = np.eye(f.shape[0])
@@ -25,7 +25,7 @@ class TestTransisionModel(unittest.TestCase):
         return super().setUpClass()
     
     def setUp(self):
-        self.transition = dt.TransitionModel(self.model, self.state)
+        self.transition = dt.TransitionModel(self.model, state=self.state)
         return super().setUp()
     
     def test_transition(self):
@@ -36,3 +36,39 @@ class TestTransisionModel(unittest.TestCase):
     def test_jacobian(self):
         jac = self.transition.jacobian(self.state)
         assert jac is not None, "Jacobian is None!"
+
+
+class TestSharedState(unittest.TestCase):
+    """Python models may return the State object they were built with."""
+
+    def test_transition_returning_its_own_state(self):
+        class Static:
+            def __init__(self, state): self._state = state
+            def state(self, epoch): return self._state
+            def jacobian(self, state): return np.eye(2)
+
+        state = dt.State(np.array([1.0, 2.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
+        transition = dt.TransitionModel(Static(state), state=state)
+        out = transition.state(dt.Epoch(1))
+        np.testing.assert_array_equal(out.value, [1.0, 2.0])
+        self.assertEqual(out.epoch.value, 1)
+
+    def test_update_returning_its_own_state(self):
+        class Static:
+            def __init__(self, state): self._state = state
+            def state(self, epoch): return self._state
+            def jacobian(self, state): return np.eye(2)
+
+        class Measurement:
+            def projection(self, s): return dt.Observation(s.value, epoch=s.epoch)
+            def noise(self): return np.eye(2)
+
+        class Update:
+            def __init__(self, state): self._state = state
+            def apply(self, observation): return self._state
+
+        state = dt.State(np.array([1.0, 2.0]), covariance=np.eye(2), epoch=dt.Epoch(0))
+        transition = dt.TransitionModel(Static(state), state=state)
+        update = dt.UpdateModel(Update(state), transition=transition, measurement=dt.MeasurementModel(Measurement()))
+        out = update.apply(dt.Observation(np.array([0.0, 0.0]), epoch=dt.Epoch(0)))
+        np.testing.assert_array_equal(out.value, [1.0, 2.0])

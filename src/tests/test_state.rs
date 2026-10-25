@@ -1,7 +1,7 @@
-use crate::epoch::Epoch;
-use crate::state::{ State, StateN, StateDyn };
 use crate::common::Composable;
-use crate::common::na as na;
+use crate::common::na;
+use crate::epoch::Epoch;
+use crate::state::{State, StateDyn, StateN};
 
 #[test]
 fn test_add() {
@@ -28,7 +28,6 @@ fn static_alloc() {
         epoch: Epoch::new(0),
     };
 }
-
 
 #[test]
 fn runtime_alloc() {

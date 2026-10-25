@@ -10,12 +10,15 @@ class LinearMeasurement:
 
     def projection(self, state: dt.State):
         z = self.h @ state.value
-        return dt.Observation(z, state.epoch)
+        return dt.Observation(z, epoch=state.epoch)
 
     def inverse(self, observation: dt.Observation):
         x = self.h_inv @ observation.value
         cov = np.eye(x.size)
-        return dt.State(x, cov, observation.epoch)
+        return dt.State(x, covariance=cov, epoch=observation.epoch)
+
+    def noise(self):
+        return self.r
 
     def jacobian(self, state: dt.State):
         return self.jac
@@ -34,7 +37,7 @@ class LinearTransition:
         # state / covariance update
         value = self.f @ self._state.value
         cov = self.f @ self._state.covariance @ self.f.T + self.q
-        self._state = dt.State(value, cov, epoch)
+        self._state = dt.State(value, covariance=cov, epoch=epoch)
 
         return self._state
     
@@ -61,7 +64,7 @@ class LinearUpdate:
         # compute gains
         h = self.m.model.h
         h_t = h.transpose()
-        r = self.m.model.r
+        r = self.m.noise()
         s = h @ _cov @ h_t + r
         s_inv = np.linalg.pinv(s)
 
@@ -72,8 +75,4 @@ class LinearUpdate:
         value = _state.value + k @ y
         cov = (np.eye(value.size) - k @ h) @ _cov
 
-        return dt.State(value, cov, epoch)
-
-    def jacobian(self, state: dt.State):
-        jac = self.t.jacobian(state)
-        return jac
+        return dt.State(value, covariance=cov, epoch=epoch)

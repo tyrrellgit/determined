@@ -16,7 +16,7 @@ class TestAlgorithm(unittest.TestCase):
         cls.value = np.array([1.0, 1.0])
         cls.cov = np.eye(cls.value.size)
         cls.epoch = dt.Epoch(0)
-        cls.obs = dt.Observation(np.array([0.0, 1.0]), cls.epoch)
+        cls.obs = dt.Observation(np.array([0.0, 1.0]), epoch=cls.epoch)
 
         cls.f = np.diag(np.array([2.0, 1.5]))
         cls.q = np.eye(cls.f.shape[0])
@@ -31,19 +31,19 @@ class TestAlgorithm(unittest.TestCase):
     
     # Rebuild models at each test to avoid persistent state
     def setUp(self):
-        self.state = dt.State(self.value, self.cov, self.epoch)
+        self.state = dt.State(self.value, covariance=self.cov, epoch=self.epoch)
 
         self.t = LinearTransition(self.f, self.q, self.state)
-        self.transition = dt.TransitionModel(self.t, self.state)
+        self.transition = dt.TransitionModel(self.t, state=self.state)
 
         self.m = LinearMeasurement(self.h, self.r)
         self.measurement = dt.MeasurementModel(self.m)
 
         self.u = LinearUpdate(self.transition, self.measurement)
-        self.update = dt.UpdateModel(self.u, self.transition, self.measurement)
+        self.update = dt.UpdateModel(self.u, transition=self.transition, measurement=self.measurement)
 
         # this is basically just a type-erased wrapper
-        self.algorithm = dt.KalmanFilter(self.update)
+        self.algorithm = dt.CustomFilter(self.update)
         return super().setUp()
     
     def test_predict(self):
@@ -61,3 +61,18 @@ class TestAlgorithm(unittest.TestCase):
     def test_apply(self):
         new_state = self.algorithm.update(self.obs)
         assert isinstance(new_state, dt.State), "state should be dt.State"
+
+    def test_reset_without_reset_method_warns(self):
+        with self.assertLogs("determined", level="WARNING") as logs:
+            self.algorithm.reset()
+        self.assertIn("No update.reset()", logs.output[0])
+
+    def test_reset_error_propagates(self):
+        class Failing(LinearUpdate):
+            def reset(self):
+                raise RuntimeError("reset failed")
+
+        update = dt.UpdateModel(Failing(self.transition, self.measurement),
+                                transition=self.transition, measurement=self.measurement)
+        with self.assertRaises(RuntimeError):
+            dt.CustomFilter(update).reset()

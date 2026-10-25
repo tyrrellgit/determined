@@ -5,9 +5,8 @@
 
 use std::ops::{Add, Sub};
 
-pub use nalgebra as na;
 pub use crate::common::Composable;
-
+pub use nalgebra as na;
 
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Epoch {
@@ -17,7 +16,7 @@ pub struct Epoch {
 impl Epoch {
     pub fn new(value: i64) -> Self {
         Epoch { value }
-    }   
+    }
 }
 
 impl Add for Epoch {

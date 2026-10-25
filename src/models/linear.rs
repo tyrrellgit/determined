@@ -1,71 +1,84 @@
-//! Model traits used by the Extended Kalman Filter implementation.
+//! Linear models used by the Kalman Filter implementation.
 //!
-//! These traits allow users to supply nonlinear state transition and
-//! measurement models with accompanying Jacobians so the EKF can operate.
-//! 
+//! These models take linear state transition and measurement matrices
+//! defining a standard Kalman Filter. They are generic over the dimension
+//! type, so work with statically sized (`na::Const<N>`, see the `...N` /
+//! `...NM` aliases) and dynamically sized (`na::Dyn`) matrices.
 
-use crate::common::na as na;
+use crate::common::linalg::moore_penrose_inverse;
+use crate::common::{FilterAllocator, na};
 use crate::epoch::Epoch;
 use crate::measurement::Observation;
-use crate::state::{ State, StatePtr };
+use crate::state::{State, StatePtr};
 
-use crate::common::linalg::{ moore_penrose_right_inverse };
+use na::allocator::Allocator;
 
-use crate::models::traits::{ 
-    TransitionModel, MeasurementModel, UpdateModel, DefaultFromState
+use crate::models::traits::{
+    DefaultFromState, InverseMeasurement, MeasurementJacobian, MeasurementModel,
+    TransitionJacobian, TransitionModel, UpdateModel,
 };
+use crate::models::update::kalman_update;
 
 // Transition Models
 // Linear (Discrete Time)
 #[derive(Clone, Debug)]
-pub struct LinearTransition<const N: usize> {
-    pub state: StatePtr<na::Const<N>>,    // state vector (N x 1)
-    pub f: na::SMatrix<f64, N, N>,             // state transition (N x N)
-    pub q: na::SMatrix<f64, N, N>,             // process noise covariance (N x N)
-    f_inv: Option<na::SMatrix<f64, N, N>>,     // inverse of F
+pub struct LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    pub state: StatePtr<N>,                // state vector (N x 1)
+    pub f: na::OMatrix<f64, N, N>,         // state transition (N x N)
+    pub q: na::OMatrix<f64, N, N>,         // process noise covariance (N x N)
+    f_inv: Option<na::OMatrix<f64, N, N>>, // inverse of F
 }
 
-impl<const N: usize> LinearTransition<N> { 
-    pub fn new(
-        state: StatePtr<na::Const<N>>,
-        f: na::SMatrix<f64, N, N>,
-        q: na::SMatrix<f64, N, N> ) -> Self {
+/// Statically sized `LinearTransition`.
+pub type LinearTransitionN<const N: usize> = LinearTransition<na::Const<N>>;
 
-        let f_inv = match f.try_inverse() {
-            None => { 
-                spdlog::warn!("State transition matrix F is non-invertible;
-                backward propagation will do nothing.");
-                None
-            },
-            Some(f_inv) => Some(f_inv),
-        };
+impl<N> LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    pub fn new(state: StatePtr<N>, f: na::OMatrix<f64, N, N>, q: na::OMatrix<f64, N, N>) -> Self {
+        let f_inv = f.clone().try_inverse();
+        if f_inv.is_none() {
+            spdlog::warn!(
+                "State transition matrix F is non-invertible; backward propagation will do nothing."
+            );
+        }
         LinearTransition { state, f, q, f_inv }
     }
+}
 
-    fn f_inv(&self) -> na::SMatrix<f64, N, N> {
-        // getter for F inverse with default zero matrix
-        self.f_inv.unwrap_or(na::SMatrix::<f64, N, N>::zeros())
-    }
-}   
-
-impl<const N: usize> DefaultFromState for LinearTransition<N> {
-
+impl<N> DefaultFromState for LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
     type DefaultType = LinearTransition<N>;
-    type StateType = StatePtr<na::Const<N>>;
+    type StateType = StatePtr<N>;
 
     fn default_from_state(state: Self::StateType) -> Self::DefaultType
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
+        let n = N::from_usize(state.read().unwrap().dim());
         LinearTransition::new(
             state,
-            na::SMatrix::<f64, N, N>::identity(),
-            na::SMatrix::<f64, N, N>::zeros(),
+            na::OMatrix::<f64, N, N>::identity_generic(n, n),
+            na::OMatrix::<f64, N, N>::zeros_generic(n, n),
         )
     }
 }
 
-impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
-
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
+impl<N> TransitionModel<N> for LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    fn state(&mut self, epoch: &Epoch) -> &StatePtr<N> {
         // Determine timesteps to propagate
         let mut state = self.state.write().unwrap();
 
@@ -74,177 +87,207 @@ impl<const N: usize> TransitionModel<na::Const<N>> for LinearTransition<N> {
             return &self.state;
         }
 
-        let cov =  &state.covariance();
-
         if delta > 0 {
             // propagate forward
             for _ in 0..delta {
-                state.value = self.f * state.value;
-                state.covariance = Some(self.f * cov * self.f.transpose() + self.q);
+                let cov = state.covariance();
+                state.value = &self.f * &state.value;
+                state.covariance = Some(&self.f * cov * self.f.transpose() + &self.q);
             }
         } else {
             // propagate backward
-            let f_inv = self.f_inv();
+            let Some(f_inv) = &self.f_inv else {
+                spdlog::warn!(
+                    "State transition matrix F is non-invertible; backward propagation will do nothing."
+                );
+                return &self.state;
+            };
             for _ in 0..delta.abs() {
-                state.value = f_inv * state.value;
-                state.covariance = Some(f_inv * (cov - self.q) * f_inv.transpose());
+                let cov = state.covariance();
+                state.value = f_inv * &state.value;
+                state.covariance = Some(f_inv * (cov - &self.q) * f_inv.transpose());
             }
         };
+        state.epoch = *epoch;
         &self.state
     }
+}
 
-    fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, N, N> {
-        self.f
+impl<N> TransitionJacobian<N> for LinearTransition<N>
+where
+    N: na::Dim,
+    na::DefaultAllocator: Allocator<N> + Allocator<N, N>,
+{
+    /// The Jacobian of a linear transition is F.
+    fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, N, N> {
+        self.f.clone()
     }
 }
 
 /// Measurement Models
 /// Linear
 #[derive(Clone, Debug)]
-pub struct LinearMeasurement<const N: usize, const M: usize> {
-    pub h: na::SMatrix<f64, M, N>,             // measurement matrix
-    pub r: na::SMatrix<f64, M, M>,             // measurement noise covariance(M x M)
-    h_t: na::SMatrix<f64, N, M>,               // transpose of H
-    h_inv: na::SMatrix<f64, N, M>,             // inverse of H
+pub struct LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    pub h: na::OMatrix<f64, M, N>,         // measurement matrix
+    pub r: na::OMatrix<f64, M, M>,         // measurement noise covariance(M x M)
+    h_inv: Option<na::OMatrix<f64, N, M>>, // pseudo-inverse of H, if full rank
 }
 
-impl<const N: usize, const M: usize> LinearMeasurement<N, M> {
-    pub fn new(h: na::SMatrix<f64, M, N>, r: na::SMatrix<f64, M, M>) -> Self {
-        let h_inv = match moore_penrose_right_inverse(&h) {
-            None => {
-                spdlog::warn!("Measurement matrix H is non-invertible; inverse projection will return zero.");
-                na::SMatrix::<f64, N, M>::zeros()
-            },
-            Some(h_inv) => h_inv,
-        };
-        LinearMeasurement {
-            h,
-            r,
-            h_t: h.transpose(),
-            h_inv,
-        }
+/// Statically sized `LinearMeasurement`.
+pub type LinearMeasurementNM<const N: usize, const M: usize> =
+    LinearMeasurement<na::Const<N>, na::Const<M>>;
+
+impl<N, M> LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    pub fn new(h: na::OMatrix<f64, M, N>, r: na::OMatrix<f64, M, M>) -> Self {
+        let h_inv = moore_penrose_inverse(&h);
+        LinearMeasurement { h, r, h_inv }
     }
 }
 
-
-impl<const N: usize, const M: usize> Default for LinearMeasurement<N, M> {
+impl<N, M> Default for LinearMeasurement<N, M>
+where
+    N: na::DimName,
+    M: na::DimName,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
     fn default() -> Self {
-        let _h = na::SMatrix::<f64, M, N>::identity();
-        LinearMeasurement {
-            h: _h,
-            r: na::SMatrix::<f64, M, M>::identity(),
-            h_t: _h.transpose(),
-            h_inv:  moore_penrose_right_inverse(&_h).unwrap_or(na::SMatrix::<f64, N, M>::zeros()),
-        }
+        LinearMeasurement::new(
+            na::OMatrix::<f64, M, N>::identity(),
+            na::OMatrix::<f64, M, M>::identity(),
+        )
     }
 }
 
-impl<const N: usize, const M: usize> MeasurementModel<na::Const<N>, na::Const<M>> for LinearMeasurement<N, M> {
-    fn projection(&self, state: &State<na::Const<N>>) -> Observation<na::Const<M>> {
+impl<N, M> MeasurementModel<N, M> for LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    fn projection(&self, state: &State<N>) -> Observation<M> {
         Observation {
-            value: self.h * state.value,
-            epoch: state.epoch
+            value: &self.h * &state.value,
+            epoch: state.epoch,
         }
     }
 
-    fn inverse(&self, obs: &Observation<na::Const<M>>) -> State<na::Const<N>> {
-        State {
-            value: self.h_inv * obs.value,
+    fn noise(&self) -> na::OMatrix<f64, M, M> {
+        self.r.clone()
+    }
+}
+
+impl<N, M> MeasurementJacobian<N, M> for LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    /// The Jacobian of a linear measurement is H.
+    fn jacobian(&self, _state: &State<N>) -> na::OMatrix<f64, M, N> {
+        self.h.clone()
+    }
+}
+
+impl<N, M> InverseMeasurement<N, M> for LinearMeasurement<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    /// Pseudo-inverse projection; `None` if H is rank deficient.
+    fn inverse(&self, obs: &Observation<M>) -> Option<State<N>> {
+        self.h_inv.as_ref().map(|h_inv| State {
+            value: h_inv * &obs.value,
             covariance: None,
             epoch: obs.epoch,
-        }
-    } // TODO: probably dont need this since its could often be ill-defined
-
-    fn jacobian(&self, _state: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
-        self.h // TODO: code proper jacobian
+        })
     }
 }
 
 // Update Models
 // Linear
-pub struct LinearUpdate<const N: usize, const M: usize > {
-    pub state: StatePtr<na::Const<N>>,         // mutable ref. to state
-    pub measurement: LinearMeasurement<N, M>,    // measurement model
-    pub transition: LinearTransition<N>,         // transition model
-    identity: na::SMatrix<f64, N, N>,                // identity matrix
+pub struct LinearUpdate<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    pub state: StatePtr<N>,                   // mutable ref. to state
+    pub measurement: LinearMeasurement<N, M>, // measurement model
+    pub transition: LinearTransition<N>,      // transition model
 }
 
-impl<const N: usize, const M: usize> LinearUpdate<N, M> {
-    pub fn new(
-        state: StatePtr<na::Const<N>>,
-        measurement: LinearMeasurement<N, M>,
-        transition: LinearTransition<N>,
-    ) -> Self {
+/// Statically sized `LinearUpdate`.
+pub type LinearUpdateNM<const N: usize, const M: usize> = LinearUpdate<na::Const<N>, na::Const<M>>;
+
+impl<N, M> LinearUpdate<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    pub fn new(measurement: LinearMeasurement<N, M>, transition: LinearTransition<N>) -> Self {
+        let _state = transition.state.clone();
         LinearUpdate {
-            state,
+            state: _state,
             measurement,
             transition,
-            identity: na::SMatrix::<f64, N, N>::identity(),
         }
     }
 }
 
-impl<const N: usize, const M: usize> DefaultFromState for LinearUpdate<N, M> {
-
+impl<N, M> DefaultFromState for LinearUpdate<N, M>
+where
+    N: na::DimName,
+    M: na::DimName,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
     type DefaultType = LinearUpdate<N, M>;
-    type StateType = StatePtr<na::Const<N>>;
+    type StateType = StatePtr<N>;
 
     fn default_from_state(state: Self::StateType) -> Self::DefaultType {
         LinearUpdate::new(
-            state.clone(),
             LinearMeasurement::<N, M>::default(),
-            LinearTransition::<N>::default_from_state(state)
+            LinearTransition::<N>::default_from_state(state),
         )
     }
 }
 
-impl<const N: usize, const M: usize> UpdateModel<na::Const<N>, na::Const<M>> for LinearUpdate<N, M> {
-
-    fn state(&mut self, epoch: &Epoch) -> &StatePtr<na::Const<N>> {
-        self.transition.state(epoch)
+impl<N, M> UpdateModel<N, M> for LinearUpdate<N, M>
+where
+    N: na::Dim,
+    M: na::Dim,
+    na::DefaultAllocator: FilterAllocator<N, M>,
+{
+    fn state(&mut self, epoch: Option<&Epoch>) -> &StatePtr<N> {
+        match epoch {
+            Some(epoch) => self.transition.state(epoch),
+            _ => &self.transition.state,
+        }
     }
-    
-    fn apply(&mut self, observation: &Observation<na::Const<M>>) -> &StatePtr<na::Const<N>> {
 
+    fn apply(&mut self, observation: &Observation<M>) -> &StatePtr<N> {
         // propagate state to observation epoch
         _ = self.transition.state(&observation.epoch);
         let mut state = self.state.write().unwrap();
 
         // project state to measurement domain
-        let z_x = &self.measurement.projection(&state).value;
-        let z = &observation.value;
+        let z_x = self.measurement.projection(&state).value;
 
-        let cov = &state.covariance();
-
-        // compute gain matrix
-        let h = &self.measurement.h;
-        let h_t = &self.measurement.h_t;
-        let s = h * cov * h_t + self.measurement.r;
-        let s_inv = match s.try_inverse(){
-            None => {
-                spdlog::error!(
-                    "Invalid update: Innovation covariance S is singular; state will not be updated."
-                );
-                return &self.state;
-            }
-            Some(s_inv) => s_inv,
-        };
-        
-        // Compute gain and innovation
-        let k = cov * h_t * s_inv;
-        let y = z - z_x;
-        
-        // Update state
-        state.value = state.value + k * y;
-
-        // Update Covariance
-        state.covariance = Some((self.identity - k * h) * cov);
+        let h = self.measurement.jacobian(&state);
+        let r = self.measurement.noise();
+        kalman_update(&mut state, &observation.value, &z_x, &h, &r);
 
         &self.state
-
-    }
-
-    fn jacobian(&self, _x: &State<na::Const<N>>) -> na::SMatrix<f64, M, N> {
-        self.measurement.h
     }
 }
